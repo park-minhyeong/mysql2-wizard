@@ -13,7 +13,6 @@
 	"author": "park-minhyeong",
 	"license": "MIT",
 	"dependencies": {
-		"dotenv": "^16.5.0",
 		"mysql2": "^3.14.1",
 		"nodemon": "^3.1.10",
 		"tspec": "^0.1.116"
@@ -21,6 +20,7 @@
 	"devDependencies": {
 		"@types/express": "^4.17.21",
 		"@types/node": "^22.10.7",
+		"dotenv": "^16.5.0",
 		"express": "^4.18.2",
 		"form-data": "^4.0.0",
 		"tar": "^7.1.0",
