@@ -142,5 +142,7 @@ npm run test
 MIT License - see LICENSE file for details
 
 ## Author
+[@park-minhyeong](https://github.com/park-minhyeong)
 
-park-minhyeong
+## Acknowledgments
+This project was inspired by the work of [@Binghagoon](https://github.com/Binghagoon).
