@@ -7,7 +7,7 @@
 		"dev": "nodemon --experimental-specifier-resolution=node src/_test/app/index.ts",
 		"build": "rm -rf dist && tsc -p tsconfig.build.json --noEmit false",
 		"build-publish": "npm run build && node setupPackage.js",
-		"upload": "npm run build && npm version patch && node setupPackage.js && cd dist && npm publish && git push && git push --tags",
+		"upload": "npm run build-publish && npm version patch && cd dist && npm publish && git push && git push --tags",
 		"test": "ts-node src/test.ts"
 	},
 	"author": "park-minhyeong",
