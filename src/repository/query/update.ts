@@ -1,0 +1,62 @@
+import { RowDataPacket, ResultSetHeader } from 'mysql2/promise';
+import { handler } from '../handler';
+import mysql2 from 'mysql2/promise';
+import { CompareQuery, QueryOption, CompareValue } from '../../interface/Query';
+import { toRow } from '../../utils';
+
+const queryString = <T>({ table }: QueryOption<T>) => ({
+	update: mysql2.format('UPDATE ?? SET ', [table]),
+});
+
+const getOperatorAndValue = (value: any): { operator: string; value: any } => {
+	if (value === null || typeof value !== 'object') {
+		return { operator: '=', value };
+	}
+	return value;
+};
+
+const buildWhereClause = <T>(
+	query: CompareQuery<T>,
+	option: QueryOption<T>
+): { conditions: string; values: unknown[] } => {
+	const entries = Object.entries(query).filter(([, value]) => value !== undefined);
+	const values: unknown[] = [];
+	const conditions = entries.map(([key, value]) => {
+		const val = value as CompareValue<T[keyof T]>;
+		if (typeof val === 'object' && val !== null && !Array.isArray(val) && 'operator' in val && 'value' in val) {
+			values.push(val.value);
+			return `${mysql2.format('??', [key])} ${val.operator} ?`;
+		}
+		values.push(val);
+		return `${mysql2.format('??', [key])} = ?`;
+	}).join(' AND ');
+	return { conditions, values };
+};
+
+const buildSetClause = <T>(
+	obj: Partial<T>,
+	option: QueryOption<T>
+): { setConditions: string; setValues: unknown[] } => {
+	const entries = Object.entries(obj).filter(([, value]) => value !== undefined);
+	const setValues: unknown[] = [];
+	const setConditions = entries.map(([key, value]) => {
+		setValues.push(value);
+		return `${mysql2.format('??', [key])} = ?`;
+	}).join(', ');
+	return { setConditions, setValues };
+};
+
+const update = async <T>(
+	query: CompareQuery<T>,
+	obj: Partial<T>,
+	option: QueryOption<T>
+): Promise<ResultSetHeader> => handler(async connection => {
+	const { conditions, values } = buildWhereClause(query, option);
+	const { setConditions, setValues } = buildSetClause(obj, option);
+	const query_ = queryString(option).update + setConditions + ' WHERE ' + conditions;
+	option.printQueryIfNeeded?.(query_);
+	const [result] = await connection.query<ResultSetHeader>(query_, [...setValues, ...values]);
+	return result;
+});
+
+export { update };

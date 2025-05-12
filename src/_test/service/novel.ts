@@ -1,0 +1,27 @@
+import { ResultSetHeader } from "mysql2/promise";
+import { novelChapterKeys, NovelChapter, NovelChapterAutoSetKeys, NovelChapterCreate, NovelChapterUpdate } from "../interface/Novel";
+import { repository } from "../../repository/index";
+const pack = repository<NovelChapter, NovelChapterAutoSetKeys>({
+	keys: novelChapterKeys,
+	table: "ohrora.novel_chapter",
+})
+async function read(): Promise<NovelChapter[]>;
+async function read(id: number): Promise<NovelChapter | undefined>;
+async function read(id?: number): Promise<NovelChapter[] | NovelChapter | undefined> {
+	if (id) return pack.findOne({ id });
+	return pack.find();
+}
+async function create(novelChapterCreate: NovelChapterCreate): Promise<ResultSetHeader> {
+	return pack.save(novelChapterCreate);
+}
+async function update(id: number, novelChapterUpdate: NovelChapterUpdate): Promise<ResultSetHeader> {
+	return pack.update({ id }, novelChapterUpdate);
+}
+async function delete_(id: number): Promise<ResultSetHeader> {
+	return pack.delete({ id });
+}
+const novelService = { read, create, update, delete: delete_ };
+export default novelService
+
+
+
