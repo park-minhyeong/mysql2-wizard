@@ -12,16 +12,20 @@ const buildWhereClause = <T>(
 	query: CompareQuery<T>,
 	option: QueryOption<T>
 ): { conditions: string; values: unknown[] } => {
-	const entries = Object.entries(query).filter(([, value]) => value !== undefined);
+	// Transform the query object to get database column names
+	const row = option.toRow(query as T);
+	// Filter out undefined values from the transformed row
+	const entries = Object.entries(row).filter(([, value]) => value !== undefined);
 	const values: unknown[] = [];
-	const conditions = entries.map(([key, value]) => {
-		const val = value as CompareValue<T[keyof T]>;
-		if (typeof val === 'object' && val !== null && !Array.isArray(val) && 'operator' in val && 'value' in val) {
-			values.push(val.value);
-			return `${mysql2.format('??', [key])} ${val.operator} ?`;
+	const conditions = entries.map(([columnName, value]) => {
+		// Find the original query value using the object key
+		const originalValue = query[columnName as keyof T];
+		if (typeof originalValue === 'object' && originalValue !== null && !Array.isArray(originalValue) && 'operator' in originalValue && 'value' in originalValue) {
+			values.push(originalValue.value);
+			return mysql2.format('?? ' + originalValue.operator + ' ?', [columnName, originalValue.value]);
 		}
-		values.push(val);
-		return `${mysql2.format('??', [key])} = ?`;
+		values.push(value);
+		return mysql2.format('?? = ?', [columnName, value]);
 	}).join(' AND ');
 	return { conditions, values };
 };
@@ -36,7 +40,8 @@ const find = async <T>(
 	}
 	const { conditions, values } = buildWhereClause(query, option);
 	const query_ = queryString(option).select + conditions;
-	option.printQueryIfNeeded?.(query_);
+	const query_with_values = mysql2.format(query_, values);
+	option.printQueryIfNeeded?.(query_with_values);
 	const [rows] = await connection.query<RowDataPacket[]>(query_, values);
 	return rows.map(row => option.toObject(row));
 });
@@ -48,7 +53,8 @@ const findOne = async <T>(
 ): Promise<T | undefined> => handler(async connection => {
 	const { conditions, values } = buildWhereClause(query, option);
 	const query_ = queryString(option).select + conditions;
-	option.printQueryIfNeeded?.(query_);
+	const query_with_values = mysql2.format(query_, values);
+	option.printQueryIfNeeded?.(query_with_values);
 	const [rows] = await connection.query<RowDataPacket[]>(query_, values);
 
 	if (rows.length === 0) {

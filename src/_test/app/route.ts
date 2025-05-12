@@ -4,7 +4,7 @@ import novelService from "../service/novel";
 const defaultRouter = express.Router();
 
 defaultRouter.get("/", async (req, res) => {
-	const novels = await novelService.read(1);
+	const novels = await novelService.read();
 	return res.json(novels);
 });
 defaultRouter.post("/", async (req, res) => {
