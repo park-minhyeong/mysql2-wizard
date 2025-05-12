@@ -1,2 +1,2 @@
 export * from './repository';
-export { pool, ResultSetHeader } from './config';
+export { handler, pool, ResultSetHeader } from './config';
