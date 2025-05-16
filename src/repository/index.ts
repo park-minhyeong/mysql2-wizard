@@ -1,42 +1,26 @@
-import { CompareQuery, QueryOption, ColumnMapping } from '../interface/Query';
+import { CompareQuery, QueryOption, ColumnMapping, ToRowOption } from '../interface/Query';
 import { logger } from '../log';
 import { find, findOne } from './query/find';
 import { save, saveMany } from './query/save';
 import { update } from './query/update';
 import { delete_ } from './query/delete';
 import { Repository, RepositoryConfig } from '../interface/Repository';
-import { convertToSnakeStrings, toObject, toRow } from '../utils';
+import {convertToSnakeStrings, toRow, toObject } from '../utils';
 
+const defaultAutoSetColumns = ['id', 'createdAt', 'updatedAt'] as const;
 function repository<T, AutoSet extends keyof T = never>(
 	{ table, keys, autoSetColumns, printQuery }: RepositoryConfig<T>
 ): Repository<T, AutoSet> {
 	const printQueryIfNeeded = printQuery ? (query: string) => logger.log(`Query: ${query}`) : undefined;
-	const autoSetKeys = (autoSetColumns ?? []).map(key => String(key));
+	const autoSetKeys = (autoSetColumns ?? defaultAutoSetColumns).map(key => String(key));
 	const queryOption: QueryOption<Omit<T, AutoSet>> = {
 		table,
 		keys: convertToSnakeStrings(keys),
-		autoSetColumns: convertToSnakeStrings(autoSetKeys),
+		autoSetColumns: convertToSnakeStrings(autoSetKeys), 
 		printQuery,
 		printQueryIfNeeded,
-		toRow: (obj: Omit<T, AutoSet>) => {
-			const row = {} as Record<string, unknown>;
-			keys.forEach((key) => {
-				if (autoSetKeys.includes(String(key))) {
-					row[convertToSnakeStrings([key])[0]] = undefined;
-				} else {
-					row[convertToSnakeStrings([key])[0]] = obj[key as keyof typeof obj];
-				}
-			});
-			return row;
-		},
-		toObject: (row: Record<string, unknown>) => {
-			const snakeKeys = convertToSnakeStrings([...keys]);
-			const result = {} as Record<string, unknown>;
-			keys.forEach((key, i) => {
-				result[key] = row[snakeKeys[i]];
-			});
-			return result as Omit<T, AutoSet>;
-		},
+		toRow: (obj: Omit<T, AutoSet>,option?: ToRowOption) => toRow(keys, obj as Partial<T>, convertToSnakeStrings(autoSetKeys), option),
+		toObject: (row: Record<string, unknown>) => toObject([...keys], row),
 	};
 	return {
 		find: ((query?: CompareQuery<T>) => find(query, queryOption)) as Repository<T, AutoSet>['find'],

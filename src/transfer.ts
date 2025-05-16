@@ -5,7 +5,6 @@ export function transfers<
 >(keys: ReadonlyArray<K>, columns: ReadonlyArray<string>): {
 	toObject: (row: RowDataPacket) => O;
 	toRow: (obj: O) => RowDataPacket;
-	toPartialRow: (obj: Partial<O>) => Partial<RowDataPacket>;
 } {
 	if (keys.length !== columns.length) throw new Error('keys and columns length must be same');
 	const toObject = (row: RowDataPacket) => {
@@ -28,16 +27,5 @@ export function transfers<
 		}
 		return row;
 	};
-	const toPartialRow = (obj: Partial<O>): Partial<RowDataPacket> => {
-		const row = {} as Partial<RowDataPacket>;
-		for (let i = 0; i < keys.length; i++) {
-			const key = keys[i];
-			const value = obj[key];
-			const column = columns[i];
-			if (value === undefined) continue;
-			row[column] = value;
-		}
-		return row;
-	};
-	return { toObject, toRow, toPartialRow };
+	return { toObject, toRow };
 }

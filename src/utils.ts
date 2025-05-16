@@ -24,16 +24,6 @@ const toRow = <T>(keys: readonly string[], obj: T, autoSetKeys: readonly string[
 	return snakeRow;
 };
 
-const toPartialRow = <T>(keys: string[], obj: Partial<T>): Record<string, unknown> => {
-	const row: Record<string, unknown> = {};
-	Object.entries(obj).forEach(([key, value]) => {
-		if (keys.includes(key)) {
-			if (IS_FIELD_REGEX.test(key)) row[key] = toDbBoolean(value);
-			else row[key] = value;
-		}
-	});
-	return row;
-};
 const toBoolean = (value: any): boolean => {
 	if (typeof value === 'boolean') return value;
 	if (value === 1 || value === '1') return true;
@@ -46,7 +36,7 @@ const toDbBoolean = (value: any): 1 | 0 => {
 	if (value === 0 || value === '0') return 0;
 	return Boolean(value) ? 1 : 0;
 };
-export { toObject, toRow, toPartialRow, toBoolean, toDbBoolean }
+export { toObject, toRow, toBoolean, toDbBoolean }
 export function removeUndefined<T>(obj: T): T {
 	for (const key in obj) {
 		if (obj[key] === undefined) {

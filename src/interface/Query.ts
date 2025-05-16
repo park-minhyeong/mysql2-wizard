@@ -25,6 +25,9 @@ interface QueryConfig {
 	printQueryIfNeeded?: (query: string) => void;
 }
 
+export interface ToRowOption{
+	isAutoSet?:boolean
+}
 // 쿼리 옵션 인터페이스
 interface QueryOption<T> {
 	table: string;
@@ -32,7 +35,7 @@ interface QueryOption<T> {
 	autoSetColumns?: string[];
 	printQuery?: boolean;
 	printQueryIfNeeded?: (query: string) => void;
-	toRow: (obj: T) => Record<string, unknown>;
+	toRow: (obj: T, option?: ToRowOption) => Record<string, unknown>;
 	toObject: (row: Record<string, unknown>) => T;
 }
 
