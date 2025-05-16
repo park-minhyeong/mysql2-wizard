@@ -1,6 +1,7 @@
 
 import { Novel, NovelAutoSetKeys, NovelCreate, novelKeys, NovelUpdate } from "../interface/Novel";
 import { repository } from "../../repository/index";
+import { ResultSetHeader } from "../../config";
 
 const pack = repository<Novel, NovelAutoSetKeys>({
   table: 'novel',
@@ -14,8 +15,12 @@ async function read(id?: number): Promise<Novel[] | Novel | undefined> {
 	if (!id) return pack.find();
 	return pack.findOne({ id });
 }
- 
-const create = async (novelCreate: NovelCreate) => {
+
+
+async function create(novelCreate: NovelCreate): Promise<ResultSetHeader>;
+async function create(novelCreate: NovelCreate[]):Promise<ResultSetHeader>;
+async function create(novelCreate: NovelCreate | NovelCreate[]):Promise<ResultSetHeader> {
+	if(novelCreate instanceof Array) return pack.saveMany(novelCreate);
 	return pack.save(novelCreate);
 };
 
