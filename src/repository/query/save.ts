@@ -7,7 +7,7 @@ const queryString = <T>({ table, columns }: { table: string, columns: readonly s
 	return {
 		insert: mysql2.format('INSERT INTO ?? (??) VALUES (?);', [table, columns]),
 		insertMany: mysql2.format('INSERT INTO ?? (??) VALUES ?;', [table, columns]),
-	};
+	}; 
 };
 
 const save = async <T>(obj: T, option: QueryOption<T>) =>
@@ -16,7 +16,7 @@ const save = async <T>(obj: T, option: QueryOption<T>) =>
 		const values: unknown[] = [];
 		const columns = option.keys;
 		const placeholders = columns.map((key: string) => {
-			const value = row[key];
+			const value = row[key as keyof typeof row];
 			if (option.autoSetColumns?.includes(key) && value === undefined) return 'DEFAULT';
 			values.push(value);
 			return '?';

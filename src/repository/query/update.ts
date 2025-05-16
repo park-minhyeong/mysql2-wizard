@@ -1,19 +1,11 @@
-import { RowDataPacket, ResultSetHeader } from 'mysql2/promise';
+import { ResultSetHeader } from 'mysql2/promise';
 import { handler } from '../handler';
 import mysql2 from 'mysql2/promise';
 import { CompareQuery, QueryOption, CompareValue } from '../../interface/Query';
-import { toRow } from '../../utils';
 
 const queryString = <T>({ table }: QueryOption<T>) => ({
 	update: mysql2.format('UPDATE ?? SET ', [table]),
 });
-
-const getOperatorAndValue = (value: any): { operator: string; value: any } => {
-	if (value === null || typeof value !== 'object') {
-		return { operator: '=', value };
-	}
-	return value;
-};
 
 const buildWhereClause = <T>(
 	query: CompareQuery<T>,
@@ -52,7 +44,8 @@ const update = async <T>(
 	option: QueryOption<T>
 ): Promise<ResultSetHeader> => handler(async connection => {
 	const { conditions, values } = buildWhereClause(query, option);
-	const { setConditions, setValues } = buildSetClause(obj, option);
+	const row = option.toRow(obj as T) as Partial<T>;
+	const { setConditions, setValues } = buildSetClause(row, option);
 	const query_ = queryString(option).update + setConditions + ' WHERE ' + conditions;
 	option.printQueryIfNeeded?.(query_);
 	const [result] = await connection.query<ResultSetHeader>(query_, [...setValues, ...values]);

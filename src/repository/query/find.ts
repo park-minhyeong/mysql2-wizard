@@ -1,7 +1,7 @@
 import { RowDataPacket } from 'mysql2/promise';
 import { handler } from '../handler';
 import mysql2 from 'mysql2/promise';
-import { CompareQuery, QueryOption, CompareValue } from '../../interface/Query';
+import { CompareQuery, QueryOption } from '../../interface/Query';
 
 const queryString = <T>({ table }: QueryOption<T>) => ({
 	selectAll: mysql2.format('SELECT * FROM ??;', [table]),
@@ -12,13 +12,10 @@ const buildWhereClause = <T>(
 	query: CompareQuery<T>,
 	option: QueryOption<T>
 ): { conditions: string; values: unknown[] } => {
-	// Transform the query object to get database column names
-	const row = option.toRow(query as T);
-	// Filter out undefined values from the transformed row
+	const row = option.toRow(query as T,{isAutoSet:false});
 	const entries = Object.entries(row).filter(([, value]) => value !== undefined);
 	const values: unknown[] = [];
 	const conditions = entries.map(([columnName, value]) => {
-		// Find the original query value using the object key
 		const originalValue = query[columnName as keyof T];
 		if (typeof originalValue === 'object' && originalValue !== null && !Array.isArray(originalValue) && 'operator' in originalValue && 'value' in originalValue) {
 			values.push(originalValue.value);
@@ -56,12 +53,10 @@ const findOne = async <T>(
 	const query_with_values = mysql2.format(query_, values);
 	option.printQueryIfNeeded?.(query_with_values);
 	const [rows] = await connection.query<RowDataPacket[]>(query_, values);
-
 	if (rows.length === 0) {
 		if (options?.throwError) throw new Error('Not found');
 		return undefined;
 	}
-
 	return option.toObject(rows[0]);
 });
 
