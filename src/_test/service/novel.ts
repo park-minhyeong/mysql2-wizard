@@ -1,31 +1,37 @@
-import { novelChapterKeys, NovelChapter, NovelChapterAutoSetKeys, NovelChapterCreate, NovelChapterUpdate } from "../interface/Novel";
+
+import { Novel, NovelAutoSetKeys, NovelCreate, novelKeys, NovelUpdate } from "../interface/Novel";
 import { repository } from "../../repository/index";
-import { ResultSetHeader } from "../../config";
-const pack = repository<NovelChapter, NovelChapterAutoSetKeys>({
-	keys: novelChapterKeys,
-	table: "ohrora.novel_chapter",
-	printQuery: true, 
-})
-async function read(): Promise<NovelChapter[]>;
-async function read(id: number): Promise<NovelChapter | undefined>;
-async function read(id?: number): Promise<NovelChapter[] | NovelChapter | undefined> {
-	if (id) return pack.findOne({ id });
-	return pack.find();
+
+const pack = repository<Novel, NovelAutoSetKeys>({
+  table: 'novel',
+  keys: novelKeys,
+  printQuery: true,	
+});
+
+async function read(): Promise<Novel[]>;
+async function read(id: number): Promise<Novel | undefined>;
+async function read(id?: number): Promise<Novel[] | Novel | undefined> {
+	if (!id) return pack.find();
+	return pack.findOne({ id });
 }
-async function readByNovelId(novelId: number): Promise<NovelChapter[] | NovelChapter | undefined> {
-	return pack.find({ novelId });
-}
-async function create(novelChapterCreate: NovelChapterCreate): Promise<ResultSetHeader> {
-	return pack.save(novelChapterCreate);
-}
-async function update(id: number, novelChapterUpdate: NovelChapterUpdate): Promise<ResultSetHeader> {
-	return pack.update({ id }, novelChapterUpdate);
-}
-async function delete_(id: number): Promise<ResultSetHeader> {
+ 
+const create = async (novelCreate: NovelCreate) => {
+	return pack.save(novelCreate);
+};
+
+const update = async (id: number, novelUpdate: NovelUpdate) => {
+	return pack.update({ id }, novelUpdate);
+};
+const delete_ = async (id: number) => {
 	return pack.delete({ id });
 }
-const novelService = { read, readByNovelId, create, update, delete: delete_ };
-export default novelService
 
 
+const novelService = {
+	read,
+	create,
+	update, 
+	delete: delete_,
+};
 
+export default novelService;

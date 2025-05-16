@@ -4,11 +4,15 @@ import novelService from "../service/novel";
 const defaultRouter = express.Router();
 
 defaultRouter.get("/", async (req, res) => {
+	try{
 	const novels = await novelService.read();
-	return res.json(novels);
+	return res.json(novels);}
+	catch(error){
+		console.log(error)
+	} 
 });
 defaultRouter.post("/", async (req, res) => {
-	try {
+	try { 
 		const novels = await novelService.create(req.body)
 		return res.json(novels);
 	} catch (error) {
@@ -16,15 +20,16 @@ defaultRouter.post("/", async (req, res) => {
 	}
 })
 defaultRouter.patch("/", async (req, res) => {
-	const novels = await novelService.update(59, {
-		novelId: req.body.novelId,
-		title: req.body.title,
-		text: req.body.text,
-	})
+	try{
+	const novels = await novelService.update(10, req.body)
 	return res.json(novels);
+}
+	catch(error){
+		console.log(error)
+	}
 })
 defaultRouter.delete("/", async (req, res) => {
-	const novels = await novelService.delete(59)
+	const novels = await novelService.delete(9)
 	return res.json(novels);
 })
 

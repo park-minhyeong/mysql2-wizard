@@ -1,20 +1,26 @@
-interface NovelChapter {
-	id: number;
-	novelId: number;
-	title: string;
-	text: string;
-	createdAt: Date;
-	updatedAt: Date;
-}
-const novelChapterKeys = ['id', 'novelId', 'title', 'text', 'createdAt', 'updatedAt'] as const
-type NovelChapterAutoSetKeys = "id" | "createdAt" | "updatedAt";
-interface NovelChapterCreate extends Omit<NovelChapter, NovelChapterAutoSetKeys> { }
-interface NovelChapterUpdate extends Partial<NovelChapterCreate> { }
+// Novel
+const novelKeys = ['id', 'promptId', 'name', 'summary', 'thumbnail', 'isValid', 'createdAt', 'updatedAt'] as const;
+const novelAutoSetKeys = ['id', 'createdAt', 'updatedAt'] as const;
+type NovelAutoSetKeys = (typeof novelAutoSetKeys)[number];
 
-export { novelChapterKeys }
-export type {
-	NovelChapter,
-	NovelChapterCreate,
-	NovelChapterUpdate,
-	NovelChapterAutoSetKeys,
+interface Novel {
+  id: number;
+  promptId: number;
+  name: string;
+  summary: string;
+  thumbnail: string | null;
+  isValid: boolean;
+  createdAt: Date;
+  updatedAt: Date;
 }
+
+interface NovelCreate extends Omit<Novel, NovelAutoSetKeys> { }
+interface NovelUpdate extends Partial<NovelCreate> { }
+
+export type { 
+  Novel,
+  NovelAutoSetKeys,
+  NovelCreate,
+  NovelUpdate,
+};
+export { novelKeys, novelAutoSetKeys };
