@@ -1,10 +1,10 @@
-import { ResultSetHeader } from "mysql2/promise";
 import { novelChapterKeys, NovelChapter, NovelChapterAutoSetKeys, NovelChapterCreate, NovelChapterUpdate } from "../interface/Novel";
 import { repository } from "../../repository/index";
+import { ResultSetHeader } from "../../config";
 const pack = repository<NovelChapter, NovelChapterAutoSetKeys>({
 	keys: novelChapterKeys,
 	table: "ohrora.novel_chapter",
-	printQuery: true,
+	printQuery: true, 
 })
 async function read(): Promise<NovelChapter[]>;
 async function read(id: number): Promise<NovelChapter | undefined>;

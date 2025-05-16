@@ -14,7 +14,7 @@ export function transfers<
 			const key = keys[i];
 			const column = columns[i];
 			const value = row[column];
-			obj[key] = value as unknown as O[K];
+			obj[key] = value as unknown as O[K]; 
 		}
 		return obj;
 	};
