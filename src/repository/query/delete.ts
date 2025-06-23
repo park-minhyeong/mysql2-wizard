@@ -2,6 +2,7 @@ import { ResultSetHeader } from 'mysql2/promise';
 import { handler } from '../handler';
 import mysql2 from 'mysql2/promise';
 import { CompareQuery, QueryOption, CompareValue } from '../../interface/Query';
+import { convertToSnakeString } from '../../utils';
 
 const queryString = <T>({ table }: QueryOption<T>) => ({
 	delete: mysql2.format('DELETE FROM ?? WHERE ', [table]),
@@ -17,10 +18,10 @@ const buildWhereClause = <T>(
 		const val = value as CompareValue<T[keyof T]>;
 		if (typeof val === 'object' && val !== null && !Array.isArray(val) && 'operator' in val && 'value' in val) {
 			values.push(val.value);
-			return `${mysql2.format('??', [key])} ${val.operator} ?`;
+			return `${mysql2.format('??', [convertToSnakeString(key)])} ${val.operator} ?`;
 		}
 		values.push(val);
-		return `${mysql2.format('??', [key])} = ?`;
+		return `${mysql2.format('??', [convertToSnakeString(key)])} = ?`;
 	}).join(' AND ');
 	return { conditions, values };
 };
