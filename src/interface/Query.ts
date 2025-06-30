@@ -11,7 +11,7 @@ export type AutoSetColumns<T> = keyof T;
 export type CompareOperator = '=' | '!=' | '>' | '<' | '>=' | '<=' | 'LIKE' | 'IN';
 
 // 비교 값 타입
-export type CompareValue<T> = T | { operator: CompareOperator; value: T };
+export type CompareValue<T> = T | T[] | { operator: CompareOperator; value: T };
 
 // 비교 쿼리 타입
 type CompareQuery<T> = {

@@ -9,7 +9,7 @@ import { repository } from "../../repository/index";
 import { ResultSetHeader } from "../../config";
 
 const pack = repository<Novel, NovelAutoSetKeys>({
-  table: "novel",
+  table: "ohrora.novel",
   keys: novelKeys,
   printQuery: true,
 });

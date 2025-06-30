@@ -17,9 +17,17 @@ const buildWhereClause = <T>(
 	const values: unknown[] = [];
 	const conditions = entries.map(([columnName, value]) => {
 		const originalValue = query[columnName as keyof T];
-		if (typeof originalValue === 'object' && originalValue !== null && !Array.isArray(originalValue) && 'operator' in originalValue && 'value' in originalValue) {
-			values.push(originalValue.value);
-			return mysql2.format('?? ' + originalValue.operator + ' ?', [columnName, originalValue.value]);
+		if (typeof originalValue === 'object' && originalValue !== null) {
+			if (Array.isArray(originalValue)) {
+				const arrayConditions = originalValue.map(val => {
+					values.push(val);
+					return mysql2.format('?? = ?', [columnName, val]);
+				}).join(' OR ');
+				return `(${arrayConditions})`;
+			} else if ('operator' in originalValue && 'value' in originalValue) {
+				values.push(originalValue.value);
+				return mysql2.format('?? ' + originalValue.operator + ' ?', [columnName, originalValue.value]);
+			}
 		}
 		values.push(value);
 		return mysql2.format('?? = ?', [columnName, value]);
