@@ -35,16 +35,94 @@ const buildWhereClause = <T>(
 	return { conditions, values };
 };
 
+interface LikeOptions<T> {
+	like?: CompareQuery<T>;
+	likeFront?: CompareQuery<T>;
+	likeBack?: CompareQuery<T>;
+}
+
+const buildLikeClause = <T>(
+	likeOptions: LikeOptions<T>,
+	option: QueryOption<T>
+): { conditions: string; values: unknown[] } => {
+	const allConditions: string[] = [];
+	const allValues: unknown[] = [];
+
+	Object.entries(likeOptions).forEach(([type, query]) => {
+		if (!query) return;
+		const row = option.toRow(query as T, { isAutoSet: false });
+		Object.entries(row).forEach(([columnName, value]) => {
+			if (value === undefined) return;
+			let likeValue: string;
+			switch (type) {
+				case 'like':
+					likeValue = `%${value}%`;
+					break;
+				case 'likeFront':
+					likeValue = `%${value}`;
+					break;
+				case 'likeBack':
+					likeValue = `${value}%`;
+					break;
+				default:
+					return;
+			}
+			allValues.push(likeValue);
+			allConditions.push(mysql2.format('?? LIKE ?', [columnName, likeValue]));
+		});
+	});
+
+	return {
+		conditions: allConditions.join(' AND '),
+		values: allValues
+	};
+};
+
 const find = async <T>(
-	query: CompareQuery<T> | undefined,
+	query: (CompareQuery<T> & LikeOptions<T>) | undefined,
 	option: QueryOption<T>
 ): Promise<T[]> => handler(async connection => {
 	if (!query || Object.keys(query).length === 0) {
 		const [rows] = await connection.query<RowDataPacket[]>(queryString(option).selectAll);
 		return rows.map(row => option.toObject(row));
 	}
-	const { conditions, values } = buildWhereClause(query, option);
-	const query_ = queryString(option).select + conditions;
+
+	const conditions: string[] = [];
+	const values: unknown[] = [];
+
+	// Handle regular conditions
+	const regularQuery: CompareQuery<T> = {};
+	Object.entries(query).forEach(([key, value]) => {
+		if (!['like', 'likeFront', 'likeBack'].includes(key)) {
+			(regularQuery as any)[key] = value;
+		}
+	});
+
+	if (Object.keys(regularQuery).length > 0) {
+		const { conditions: regularConditions, values: regularValues } = buildWhereClause(regularQuery, option);
+		if (regularConditions) {
+			conditions.push(regularConditions);
+			values.push(...regularValues);
+		}
+	}
+
+	// Handle LIKE conditions
+	const likeOptions: LikeOptions<T> = {
+		like: query.like,
+		likeFront: query.likeFront,
+		likeBack: query.likeBack
+	};
+
+	if (Object.values(likeOptions).some(v => v !== undefined)) {
+		const { conditions: likeConditions, values: likeValues } = buildLikeClause(likeOptions, option);
+		if (likeConditions) {
+			conditions.push(likeConditions);
+			values.push(...likeValues);
+		}
+	}
+
+	const whereClause = conditions.length > 0 ? conditions.join(' AND ') : '1=1';
+	const query_ = queryString(option).select + whereClause;
 	const query_with_values = mysql2.format(query_, values);
 	option.printQueryIfNeeded?.(query_with_values);
 	const [rows] = await connection.query<RowDataPacket[]>(query_, values);
