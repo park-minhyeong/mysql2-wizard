@@ -7,9 +7,10 @@ import {
 } from "../interface/Novel";
 import { repository } from "../../repository/index";
 import { ResultSetHeader } from "../../config";
+import { CompareQuery } from "../..";
 
 const pack = repository<Novel, NovelAutoSetKeys>({
-  table: "ohrora.novel",
+  table: "novel",
   keys: novelKeys,
   printQuery: true,
 });
@@ -32,6 +33,10 @@ async function create(
 const update = async (id: number, novelUpdate: NovelUpdate) => {
   return pack.update({ id }, novelUpdate);
 };
+
+const updateMany = async (updates: Array<[CompareQuery<Novel>, NovelUpdate]>) => {
+  return pack.updateMany(updates);
+};
 const delete_ = async (id: number) => {
   return pack.delete({ id });
 };
@@ -40,6 +45,7 @@ const novelService = {
   read,
   create,
   update,
+  updateMany,
   delete: delete_,
 };
 

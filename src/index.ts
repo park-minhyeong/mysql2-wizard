@@ -1,2 +1,3 @@
 export * from './repository';
-export { handler, pool, ResultSetHeader } from './config';
+export * from './interface'
+export { handler, pool, ResultSetHeader, RowDataPacket } from './config';

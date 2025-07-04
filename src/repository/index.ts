@@ -2,10 +2,10 @@ import { CompareQuery, QueryOption, ColumnMapping, ToRowOption } from '../interf
 import { logger } from '../log';
 import { find, findOne } from './query/find';
 import { save, saveMany } from './query/save';
-import { update } from './query/update';
+import { update, updateMany } from './query/update';
 import { delete_ } from './query/delete';
 import { Repository, RepositoryConfig } from '../interface/Repository';
-import {convertToSnakeStrings, toRow, toObject } from '../utils';
+import { convertToSnakeStrings, toRow, toObject } from '../utils';
 
 const defaultAutoSetColumns = ['id', 'createdAt', 'updatedAt'] as const;
 function repository<T, AutoSet extends keyof T = never>(
@@ -16,10 +16,10 @@ function repository<T, AutoSet extends keyof T = never>(
 	const queryOption: QueryOption<Omit<T, AutoSet>> = {
 		table,
 		keys: convertToSnakeStrings(keys),
-		autoSetColumns: convertToSnakeStrings(autoSetKeys), 
+		autoSetColumns: convertToSnakeStrings(autoSetKeys),
 		printQuery,
 		printQueryIfNeeded,
-		toRow: (obj: Omit<T, AutoSet>,option?: ToRowOption) => toRow(keys, obj as Partial<T>, convertToSnakeStrings(autoSetKeys), option),
+		toRow: (obj: Omit<T, AutoSet>, option?: ToRowOption) => toRow(keys, obj as Partial<T>, convertToSnakeStrings(autoSetKeys), option),
 		toObject: (row: Record<string, unknown>) => toObject([...keys], row),
 	};
 	return {
@@ -28,6 +28,7 @@ function repository<T, AutoSet extends keyof T = never>(
 		save: ((obj: Omit<T, AutoSet>) => save(obj, queryOption)) as Repository<T, AutoSet>['save'],
 		saveMany: ((objs: Array<Omit<T, AutoSet>>) => saveMany(objs, queryOption)) as Repository<T, AutoSet>['saveMany'],
 		update: ((query: CompareQuery<T>, obj: Partial<Omit<T, AutoSet>>) => update(query, obj, queryOption)) as Repository<T, AutoSet>['update'],
+		updateMany: ((updates: Array<[CompareQuery<T>, Partial<Omit<T, AutoSet>>]>) => updateMany(updates, queryOption)) as Repository<T, AutoSet>['updateMany'],
 		delete: ((query: CompareQuery<T>) => delete_(query, queryOption)) as Repository<T, AutoSet>['delete'],
 	};
 }

@@ -3,8 +3,8 @@ import { repository } from "../../repository/index";
 import { ResultSetHeader } from "../../config";
 const pack = repository<NovelChapter, NovelChapterAutoSetKeys>({
 	keys: novelChapterKeys,
-	table: "ohrora.novel_chapter",
-	printQuery: true, 
+	table: "novel_chapter",
+	printQuery: true,
 })
 async function read(): Promise<NovelChapter[]>;
 async function read(id: number): Promise<NovelChapter | undefined>;
@@ -28,4 +28,4 @@ const novelChapterService = { read, readByNovelId, create, update, delete: delet
 export default novelChapterService
 
 
- 
+

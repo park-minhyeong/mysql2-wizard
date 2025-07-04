@@ -14,5 +14,6 @@ export interface Repository<T, AutoSet extends keyof T = never> {
 	save(obj: Omit<T, AutoSet>, option?: QueryOption<Omit<T, AutoSet>>): Promise<ResultSetHeader>;
 	saveMany(objs: Array<Omit<T, AutoSet>>, option?: QueryOption<Omit<T, AutoSet>>): Promise<ResultSetHeader>;
 	update(query: CompareQuery<T>, obj: Partial<Omit<T, AutoSet>>, option?: QueryOption<Omit<T, AutoSet>>): Promise<ResultSetHeader>;
+	updateMany(updates: Array<[CompareQuery<T>, Partial<Omit<T, AutoSet>>]>, option?: QueryOption<Omit<T, AutoSet>>): Promise<ResultSetHeader>;
 	delete(query: CompareQuery<T>, option?: QueryOption<T>): Promise<ResultSetHeader>;
 };

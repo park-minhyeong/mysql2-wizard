@@ -52,4 +52,23 @@ const update = async <T>(
 	return result;
 });
 
-export { update };
+const updateMany = async <T>(
+	updates: Array<[CompareQuery<T>, Partial<T>]>,
+	option: QueryOption<T>
+): Promise<ResultSetHeader> => handler(async connection => {
+	let totalAffectedRows = 0;
+
+	for (const [query, obj] of updates) {
+		const { conditions, values } = buildWhereClause(query, option);
+		const row = option.toRow(obj as T) as Partial<T>;
+		const { setConditions, setValues } = buildSetClause(row, option);
+		const query_ = queryString(option).update + setConditions + ' WHERE ' + conditions;
+		option.printQueryIfNeeded?.(query_);
+		const [result] = await connection.query<ResultSetHeader>(query_, [...setValues, ...values]);
+		totalAffectedRows += result.affectedRows;
+	}
+
+	return { affectedRows: totalAffectedRows } as ResultSetHeader;
+});
+
+export { update, updateMany };
