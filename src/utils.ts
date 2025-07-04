@@ -18,7 +18,13 @@ const toRow = <T>(keys: readonly string[], obj: T, autoSetKeys: readonly string[
 		else row[[key][0]] = obj[key as keyof typeof obj];
 	});
 	const snakeRow = Object.entries(row as Record<string, unknown>).reduce((acc, [key, value]) => {
-		acc[convertToSnakeString(key)] = value;
+		const snakeKey = convertToSnakeString(key);
+		// is_ 접두사가 있는 필드를 DB boolean(1/0)으로 변환
+		if (IS_FIELD_REGEX.test(snakeKey)) {
+			acc[snakeKey] = toDbBoolean(value);
+		} else {
+			acc[snakeKey] = value;
+		}
 		return acc;
 	}, {} as Record<string, unknown>);
 	return snakeRow;
