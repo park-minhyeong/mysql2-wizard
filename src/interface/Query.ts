@@ -10,8 +10,27 @@ export type AutoSetColumns<T> = keyof T;
 // 비교 연산자 타입
 export type CompareOperator = '=' | '!=' | '>' | '<' | '>=' | '<=' | 'LIKE' | 'IN';
 
+// ORDER BY 관련 타입
+export type OrderDirection = 'ASC' | 'DESC';
+export interface OrderByClause<T> {
+	column: keyof T;
+	direction: OrderDirection;
+}
+export type OrderBy<T> = OrderByClause<T>[];
+
+// 쿼리 옵션 타입 (SELECT용으로 이름 변경)
+export interface SelectOption<T> {
+	orderBy?: OrderBy<T>;
+	limit?: number;
+	offset?: number;
+}
+
 // 비교 값 타입
-export type CompareValue<T> = T | T[] | { operator: CompareOperator; value: T };
+export type CompareValue<T> = 
+	| T 
+	| T[] 
+	| { operator: Exclude<CompareOperator, 'IN'>; value: T }
+	| { operator: 'IN'; value: T[] };
 
 // 비교 쿼리 타입
 type CompareQuery<T> = {
