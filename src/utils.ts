@@ -1,12 +1,25 @@
 import { ToRowOption } from "./interface";
 
 const IS_FIELD_REGEX = /^is_/;
+const JSON_FIELD_REGEX = /json/i; // JSON 필드 식별용 정규식
 const toObject = <T>(keys: string[], row: Record<string, any>): T => {
 	const snakeKeys = convertToSnakeStrings([...keys]);
 	const result = {} as Record<string, unknown>;
 	keys.forEach((key, i) => {
-		if(IS_FIELD_REGEX.test(snakeKeys[i])) result[key] = toBoolean(row[snakeKeys[i]]);
-		else result[key] = row[snakeKeys[i]];
+		const snakeKey = snakeKeys[i];
+		const value = row[snakeKey];
+		
+		if(IS_FIELD_REGEX.test(snakeKey)) {
+			result[key] = toBoolean(value);
+		} else if (JSON_FIELD_REGEX.test(key) && typeof value === 'string' && value !== null) {
+			try {
+				result[key] = JSON.parse(value);
+			} catch (error) {
+				result[key] = value;
+			}
+		} else {
+			result[key] = value;
+		}
 	});
 	return result as T;
 };
@@ -14,8 +27,17 @@ const toRow = <T>(keys: readonly string[], obj: T, autoSetKeys: readonly string[
 	const isAutoSet = option?.isAutoSet ?? true;
 	const row: Record<string, unknown> = {};
 	keys.forEach((key) => {
-		if (isAutoSet && autoSetKeys.includes(String(key))) row[[key][0]] = undefined;
-		else row[[key][0]] = obj[key as keyof typeof obj];
+		if (isAutoSet && autoSetKeys.includes(String(key))) {
+			row[[key][0]] = undefined;
+		} else {
+			const value = obj[key as keyof typeof obj];
+			// JSON 필드 처리: 객체나 배열을 문자열로 변환
+			if (value !== null && value !== undefined && typeof value === 'object') {
+				row[[key][0]] = JSON.stringify(value);
+			} else {
+				row[[key][0]] = value;
+			}
+		}
 	});
 	const snakeRow = Object.entries(row as Record<string, unknown>).reduce((acc, [key, value]) => {
 		const snakeKey = convertToSnakeString(key);
