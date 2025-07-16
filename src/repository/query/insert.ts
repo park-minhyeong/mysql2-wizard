@@ -3,31 +3,14 @@ import { handler } from '../handler';
 import mysql2 from 'mysql2/promise';
 import { QueryOption } from '../../interface';
 
-const queryString = <T>({ table, columns }: { table: string, columns: readonly string[] }) => {
+const queryString = ({ table, columns }: { table: string, columns: readonly string[] }) => {
 	return {
 		insert: mysql2.format('INSERT INTO ?? (??) VALUES (?);', [table, columns]),
 		insertMany: mysql2.format('INSERT INTO ?? (??) VALUES ?;', [table, columns]),
 	}; 
 };
 
-const save = async <T>(obj: T, option: QueryOption<T>) =>
-	handler(async connection => {
-		const row = option.toRow(obj);
-		const values: unknown[] = [];
-		const columns = option.keys;
-		const placeholders = columns.map((key: string) => {
-			const value = row[key as keyof typeof row];
-			if (option.autoSetColumns?.includes(key) && value === undefined) return 'DEFAULT';
-			values.push(value);
-			return '?';
-		}).join(', ');
-		const query = queryString({ table: option.table, columns }).insert.replace('?', placeholders);
-		option.printQueryIfNeeded?.(query);
-		const [result] = await connection.query<ResultSetHeader>(query, values);
-		return result;
-	});
-
-const saveMany = async <T>(objs: T[], option: QueryOption<T>) =>
+const insert = async <T>(objs: T[], option: QueryOption<T>) =>
 	handler(async connection => {
 		const rows = objs.map(obj => option.toRow(obj));
 		const columns = option.keys;
@@ -51,4 +34,4 @@ const saveMany = async <T>(objs: T[], option: QueryOption<T>) =>
 		return result;
 	});
 
-export { save, saveMany };
+export default  insert;

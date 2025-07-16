@@ -1,8 +1,8 @@
-import { CompareQuery, QueryOption, ColumnMapping, ToRowOption } from '../interface/Query';
+import { CompareQuery, QueryOption, ToRowOption, SelectOption } from '../interface/Query';
 import { logger } from '../log';
-import { find, findOne } from './query/find';
-import { save, saveMany } from './query/save';
-import { update, updateMany } from './query/update';
+import { select, selectOne, SelectQueryBuilder } from './query/select';
+import insert from './query/insert';
+import { update } from './query/update';
 import { delete_ } from './query/delete';
 import { Repository, RepositoryConfig } from '../interface/Repository';
 import { convertToSnakeStrings, toRow, toObject } from '../utils';
@@ -23,13 +23,12 @@ function repository<T, AutoSet extends keyof T = never>(
 		toObject: (row: Record<string, unknown>) => toObject([...keys], row),
 	};
 	return {
-		find: ((query?: CompareQuery<T>) => find(query, queryOption)) as Repository<T, AutoSet>['find'],
-		findOne: ((query: CompareQuery<T>, options?: { throwError?: boolean }) => findOne(query, queryOption, options)) as Repository<T, AutoSet>['findOne'],
-		save: ((obj: Omit<T, AutoSet>) => save(obj, queryOption)) as Repository<T, AutoSet>['save'],
-		saveMany: ((objs: Array<Omit<T, AutoSet>>) => saveMany(objs, queryOption)) as Repository<T, AutoSet>['saveMany'],
-		update: ((query: CompareQuery<T>, obj: Partial<Omit<T, AutoSet>>) => update(query, obj, queryOption)) as Repository<T, AutoSet>['update'],
-		updateMany: ((updates: Array<[CompareQuery<T>, Partial<Omit<T, AutoSet>>]>) => updateMany(updates, queryOption)) as Repository<T, AutoSet>['updateMany'],
-		delete: ((query: CompareQuery<T>) => delete_(query, queryOption)) as Repository<T, AutoSet>['delete'],
+		// 체이닝 패턴: select(query).orderBy().limit().execute()
+		select: ((query?: CompareQuery<T>) => new SelectQueryBuilder(query, queryOption as unknown as QueryOption<T>)) as Repository<T, AutoSet>['select'],
+		selectOne: ((query: CompareQuery<T>) => selectOne(query, queryOption as unknown as QueryOption<T>)) as Repository<T, AutoSet>['selectOne'],
+		insert: ((objs: Array<Omit<T, AutoSet>>) => insert(objs, queryOption)) as Repository<T, AutoSet>['insert'],
+		update: ((updates: Array<[CompareQuery<T>, Partial<Omit<T, AutoSet>>]>) => update(updates, queryOption)) as Repository<T, AutoSet>['update'],
+		delete: ((query: CompareQuery<T>) => delete_(query, queryOption as unknown as QueryOption<T>)) as Repository<T, AutoSet>['delete'],
 	};
 }
 
