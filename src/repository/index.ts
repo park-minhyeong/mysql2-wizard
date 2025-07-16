@@ -23,7 +23,6 @@ function repository<T, AutoSet extends keyof T = never>(
 		toObject: (row: Record<string, unknown>) => toObject([...keys], row),
 	};
 	return {
-		// 체이닝 패턴: select(query).orderBy().limit().execute()
 		select: ((query?: CompareQuery<T>) => new SelectQueryBuilder(query, queryOption as unknown as QueryOption<T>)) as Repository<T, AutoSet>['select'],
 		selectOne: ((query: CompareQuery<T>) => selectOne(query, queryOption as unknown as QueryOption<T>)) as Repository<T, AutoSet>['selectOne'],
 		insert: ((objs: Array<Omit<T, AutoSet>>) => insert(objs, queryOption)) as Repository<T, AutoSet>['insert'],
