@@ -130,10 +130,6 @@ build
 .yarn/install-state.gz
 .pnp.*
 
-# test code
-test.*
-**/test.*
-
 # VS Code
 .vscode/*
 
