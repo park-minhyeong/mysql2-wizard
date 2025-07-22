@@ -18,11 +18,36 @@ export interface OrderByClause<T> {
 }
 export type OrderBy<T> = OrderByClause<T>[];
 
+// JOIN 관련 타입 (새로 추가)
+export type JoinType = 'INNER' | 'LEFT' | 'RIGHT' | 'FULL';
+export interface JoinClause {
+	table: string;
+	leftColumn: string;
+	rightColumn: string;
+	type: JoinType;
+}
+
+// Enhanced Relations 타입 (새로 추가)
+export type RelationType = 'hasOne' | 'hasMany' | 'belongsTo';
+export interface Relation {
+	table: string;
+	localKey: string;
+	foreignKey: string;
+	type: RelationType;
+	joinType?: JoinType;  // 기본값: INNER
+	keys?: readonly string[];  // 조인된 테이블에서 선택할 컬럼들 (새로 추가)
+}
+
+export type Relations = Record<string, Relation>;
+
 // 쿼리 옵션 타입 (SELECT용으로 이름 변경)
 export interface SelectOption<T> {
 	orderBy?: OrderBy<T>;
 	limit?: number;
 	offset?: number;
+	joins?: JoinClause[];        // 새로 추가
+	selectColumns?: string[];    // 새로 추가
+	withRelations?: string[];    // Enhanced Relations용 (새로 추가)
 }
 
 // 비교 값 타입
@@ -56,6 +81,7 @@ interface QueryOption<T> {
 	printQueryIfNeeded?: (query: string) => void;
 	toRow: (obj: T, option?: ToRowOption) => Record<string, unknown>;
 	toObject: (row: Record<string, unknown>) => T;
+	relations?: Relations;  // Enhanced Relations 지원 (새로 추가)
 }
 
 // 쿼리 문자열 생성을 위한 인터페이스
