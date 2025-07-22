@@ -16,7 +16,7 @@ const pack = repository<Test, TestAutoSetKeys>({
   relations:{
     testJoins:{
       table:"test_join",
-      keys:["name"],
+      keys:["testId","title"],
       localKey:"id",
       foreignKey:"testId",
       type:"hasOne"
@@ -28,7 +28,7 @@ async function read(): Promise<Test[]>;
 async function read(id: number): Promise<Test | undefined>;
 async function read(id?: number): Promise<Test[] | Test | undefined> {
   if (!id) return pack.select().with("testJoins").orderBy([{ column: 'title', direction: 'ASC' },{ column: 'id', direction: 'DESC' }]).limit(40);
-  return pack.selectOne({ id });
+  return pack.selectOne({ id }).with("testJoins");
 } 
 
 async function create(testCreates: TestCreate[]): Promise<ResultSetHeader> {

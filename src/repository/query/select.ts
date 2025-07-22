@@ -2,7 +2,7 @@ import { RowDataPacket } from 'mysql2/promise';
 import { handler } from '../handler';
 import mysql2 from 'mysql2/promise';
 import { CompareQuery, QueryOption, SelectOption, OrderBy, JoinType, JoinClause, Relation } from '../../interface/Query';
-import { ISelectQueryBuilder } from '../../interface/Repository';
+import { ISelectQueryBuilder, ISelectOneQueryBuilder } from '../../interface/Repository';
 import where from './condition/where';
 import orderBy from './option/orderBy';
 import limit from './option/limit';
@@ -74,6 +74,54 @@ export class SelectQueryBuilder<T> implements ISelectQueryBuilder<T> {
 	}
 }
 
+// SelectOne용 체이닝 패턴 구현
+export class SelectOneQueryBuilder<T> implements ISelectOneQueryBuilder<T> {
+	private selectOptions: SelectOption<T> = {};
+	private joinClauses: JoinClause[] = [];
+	private selectColumns: string[] = [];
+	private withRelations: string[] = [];
+
+	constructor(private query: CompareQuery<T>, private option: QueryOption<T>) {}
+
+	orderBy(orderByArray: OrderBy<T>): ISelectOneQueryBuilder<T> {
+		this.selectOptions.orderBy = orderByArray;
+		return this;
+	}
+
+	// JOIN 메서드 추가
+	join(table: string, leftColumn: string, rightColumn: string, type: JoinType = 'INNER'): ISelectOneQueryBuilder<T> {
+		this.joinClauses.push({ table, leftColumn, rightColumn, type });
+		this.selectOptions.joins = this.joinClauses;
+		return this;
+	}
+
+	// SELECT 컬럼 지정 메서드 추가
+	select(columns: string[]): ISelectOneQueryBuilder<T> {
+		this.selectColumns = columns;
+		this.selectOptions.selectColumns = this.selectColumns;
+		return this;
+	}
+
+	// Enhanced Relations 메서드 추가
+	with(relationName: string): ISelectOneQueryBuilder<T> {
+		this.withRelations.push(relationName);
+		this.selectOptions.withRelations = this.withRelations;
+		return this;
+	}
+
+	async execute(): Promise<T | undefined> {
+		return selectOne(this.query, this.option, undefined, this.selectOptions);
+	}
+
+	// PromiseLike 구현
+	then<TResult1 = T | undefined, TResult2 = never>(
+		onfulfilled?: ((value: T | undefined) => TResult1 | PromiseLike<TResult1>) | undefined | null,
+		onrejected?: ((reason: any) => TResult2 | PromiseLike<TResult2>) | undefined | null
+	): PromiseLike<TResult1 | TResult2> {
+		return this.execute().then(onfulfilled, onrejected);
+	}
+}
+
 const select = async <T>(
 	query: CompareQuery<T> | undefined, 
 	option: QueryOption<T>, 
@@ -108,10 +156,11 @@ const select = async <T>(
 				const relation = option.relations[relationName];
 				if (relation) {
 					if (relation.keys && relation.keys.length > 0) {
-						// keys가 정의된 경우
+						// keys가 정의된 경우 - 별칭을 사용해서 컬럼명 충돌 방지
 						const relationColumns = relation.keys.map(key => {
 							const snakeKey = convertToSnakeString(String(key));
-							return `${mysql2.format('??', [relation.table])}.${mysql2.format('??', [snakeKey])}`;
+							const aliasName = `${relation.table}__${snakeKey}`;
+							return `${mysql2.format('??', [relation.table])}.${mysql2.format('??', [snakeKey])} AS ${mysql2.format('??', [aliasName])}`;
 						});
 						selectParts.push(...relationColumns);
 					} else {
@@ -203,18 +252,26 @@ const select = async <T>(
 						const relationData: any = {};
 						let hasRelationData = false;
 						
-						// 관계 테이블의 컬럼들을 확인해서 데이터가 있는지 검사
+						// 관계 테이블의 컬럼들을 확인해서 데이터가 있는지 검사 (별칭 사용)
 						for (const key of relation.keys) {
 							const snakeKey = convertToSnakeString(String(key));
-							if (row[snakeKey] !== undefined && row[snakeKey] !== null) {
+							const aliasKey = `${relation.table}__${snakeKey}`;
+							if (row[aliasKey] !== undefined && row[aliasKey] !== null) {
 								hasRelationData = true;
 								break; // 하나라도 데이터가 있으면 충분
 							}
 						}
 						
 						if (hasRelationData) {
+							// 별칭된 데이터를 원래 키로 매핑해서 toObject에 전달
+							const relationRowData: Record<string, any> = {};
+							for (const key of relation.keys) {
+								const snakeKey = convertToSnakeString(String(key));
+								const aliasKey = `${relation.table}__${snakeKey}`;
+								relationRowData[snakeKey] = row[aliasKey];
+							}
 							// toObject 함수를 사용해서 relation 데이터 구성
-							const relationDataConverted = toObject(relation.keys as string[], row);
+							const relationDataConverted = toObject(relation.keys as string[], relationRowData);
 							if (relation.type === 'hasMany') {
 								// hasMany인 경우 배열에 추가 (중복 체크)
 								const existing = mainRecord[relationName].find((item: any) => 
@@ -242,29 +299,37 @@ const select = async <T>(
 			// 각 관계별로 중첩 객체 구성
 			const result = { ...mainData } as any;
 			
-			for (const relationName of selectOptions.withRelations!) {
-				const relation: Relation = option.relations![relationName];
-				if (relation && relation.keys) {
-					// 관계 테이블의 컬럼들을 확인해서 데이터가 있는지 검사
-					let hasRelationData = false;
-					for (const key of relation.keys) {
-						const snakeKey = convertToSnakeString(String(key));
-						if (row[snakeKey] !== undefined && row[snakeKey] !== null) {
-							hasRelationData = true;
-							break; // 하나라도 데이터가 있으면 충분
+							for (const relationName of selectOptions.withRelations!) {
+					const relation: Relation = option.relations![relationName];
+					if (relation && relation.keys) {
+						// 관계 테이블의 컬럼들을 확인해서 데이터가 있는지 검사 (별칭 사용)
+						let hasRelationData = false;
+						for (const key of relation.keys) {
+							const snakeKey = convertToSnakeString(String(key));
+							const aliasKey = `${relation.table}__${snakeKey}`;
+							if (row[aliasKey] !== undefined && row[aliasKey] !== null) {
+								hasRelationData = true;
+								break; // 하나라도 데이터가 있으면 충분
+							}
+						}
+						
+						// 관계 데이터가 있는 경우에만 추가
+						if (hasRelationData) {
+							// 별칭된 데이터를 원래 키로 매핑해서 toObject에 전달
+							const relationRowData: Record<string, any> = {};
+							for (const key of relation.keys) {
+								const snakeKey = convertToSnakeString(String(key));
+								const aliasKey = `${relation.table}__${snakeKey}`;
+								relationRowData[snakeKey] = row[aliasKey];
+							}
+							// toObject 함수를 사용해서 relation 데이터 구성
+							const relationDataConverted = toObject(relation.keys as string[], relationRowData);
+							result[relationName] = relationDataConverted;
+						} else {
+							result[relationName] = null;
 						}
 					}
-					
-					// 관계 데이터가 있는 경우에만 추가
-					if (hasRelationData) {
-						// toObject 함수를 사용해서 relation 데이터 구성
-						const relationDataConverted = toObject(relation.keys as string[], row);
-						result[relationName] = relationDataConverted;
-					} else {
-						result[relationName] = null;
-					}
 				}
-			}
 			return result;
 		});
 		}
@@ -305,10 +370,11 @@ const selectOne = async <T>(
 				const relation = option.relations[relationName];
 				if (relation) {
 					if (relation.keys && relation.keys.length > 0) {
-						// keys가 정의된 경우
+						// keys가 정의된 경우 - 별칭을 사용해서 컬럼명 충돌 방지
 						const relationColumns = relation.keys.map(key => {
 							const snakeKey = convertToSnakeString(String(key));
-							return `${mysql2.format('??', [relation.table])}.${mysql2.format('??', [snakeKey])}`;
+							const aliasName = `${relation.table}__${snakeKey}`;
+							return `${mysql2.format('??', [relation.table])}.${mysql2.format('??', [snakeKey])} AS ${mysql2.format('??', [aliasName])}`;
 						});
 						selectParts.push(...relationColumns);
 					} else {
@@ -371,11 +437,12 @@ const selectOne = async <T>(
 		for (const relationName of selectOptions.withRelations!) {
 			const relation: Relation = option.relations![relationName];
 			if (relation && relation.keys) {
-				// 관계 테이블의 컬럼들을 확인해서 데이터가 있는지 검사
+				// 관계 테이블의 컬럼들을 확인해서 데이터가 있는지 검사 (별칭 사용)
 				let hasRelationData = false;
 				for (const key of relation.keys) {
 					const snakeKey = convertToSnakeString(String(key));
-					if (row[snakeKey] !== undefined && row[snakeKey] !== null) {
+					const aliasKey = `${relation.table}__${snakeKey}`;
+					if (row[aliasKey] !== undefined && row[aliasKey] !== null) {
 						hasRelationData = true;
 						break; // 하나라도 데이터가 있으면 충분
 					}
@@ -383,8 +450,15 @@ const selectOne = async <T>(
 				
 				// 관계 데이터가 있는 경우에만 추가
 				if (hasRelationData) {
+					// 별칭된 데이터를 원래 키로 매핑해서 toObject에 전달
+					const relationRowData: Record<string, any> = {};
+					for (const key of relation.keys) {
+						const snakeKey = convertToSnakeString(String(key));
+						const aliasKey = `${relation.table}__${snakeKey}`;
+						relationRowData[snakeKey] = row[aliasKey];
+					}
 					// toObject 함수를 사용해서 relation 데이터 구성
-					const relationDataConverted = toObject(relation.keys as string[], row);
+					const relationDataConverted = toObject(relation.keys as string[], relationRowData);
 					result[relationName] = relationDataConverted;
 				} else {
 					result[relationName] = null;

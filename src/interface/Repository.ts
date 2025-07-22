@@ -19,10 +19,17 @@ export interface ISelectQueryBuilder<T> extends PromiseLike<T[]> {
 	execute(): Promise<T[]>;
 }
 
+export interface ISelectOneQueryBuilder<T> extends PromiseLike<T | undefined> {
+	orderBy(orderByArray: Array<{ column: keyof T; direction: 'ASC' | 'DESC' }>): ISelectOneQueryBuilder<T>;
+	join(table: string, leftColumn: string, rightColumn: string, type?: JoinType): ISelectOneQueryBuilder<T>;
+	select(columns: string[]): ISelectOneQueryBuilder<T>;
+	with(relationName: string): ISelectOneQueryBuilder<T>;
+	execute(): Promise<T | undefined>;
+}
+
 export interface Repository<T, AutoSet extends keyof T = never> {
 	select(query?: CompareQuery<T>): ISelectQueryBuilder<T>;
-	selectOne(query: CompareQuery<T>): Promise<T | undefined>;
-	selectOne(query: CompareQuery<T>, selectOptions: SelectOption<T>): Promise<T | undefined>;
+	selectOne(query: CompareQuery<T>): ISelectOneQueryBuilder<T>;
 	insert(objs: Array<Omit<T, AutoSet>>, option?: QueryOption<Omit<T, AutoSet>>): Promise<ResultSetHeader>;
 	update(updates: Array<[CompareQuery<T>, Partial<Omit<T, AutoSet>>]>, option?: QueryOption<Omit<T, AutoSet>>): Promise<ResultSetHeader>;
 	delete(query: CompareQuery<T>, option?: QueryOption<T>): Promise<ResultSetHeader>;

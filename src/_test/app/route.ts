@@ -5,7 +5,7 @@ const defaultRouter = express.Router();
 
 defaultRouter.get("/", async (req, res) => {
   try {
-    const novels = await novelService.read();
+    const novels = await novelService.read(64);
     return res.json(novels);
   } catch (error) {
     console.log(error);
