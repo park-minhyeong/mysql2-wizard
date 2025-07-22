@@ -22,6 +22,7 @@ export interface ISelectQueryBuilder<T> extends PromiseLike<T[]> {
 export interface Repository<T, AutoSet extends keyof T = never> {
 	select(query?: CompareQuery<T>): ISelectQueryBuilder<T>;
 	selectOne(query: CompareQuery<T>): Promise<T | undefined>;
+	selectOne(query: CompareQuery<T>, selectOptions: SelectOption<T>): Promise<T | undefined>;
 	insert(objs: Array<Omit<T, AutoSet>>, option?: QueryOption<Omit<T, AutoSet>>): Promise<ResultSetHeader>;
 	update(updates: Array<[CompareQuery<T>, Partial<Omit<T, AutoSet>>]>, option?: QueryOption<Omit<T, AutoSet>>): Promise<ResultSetHeader>;
 	delete(query: CompareQuery<T>, option?: QueryOption<T>): Promise<ResultSetHeader>;

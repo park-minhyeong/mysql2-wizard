@@ -27,7 +27,8 @@ function repository<T, AutoSet extends keyof T = never>(
 	return {
 		// 체이닝 패턴: select(query).orderBy().limit().execute()
 		select: ((query?: CompareQuery<T>) => new SelectQueryBuilder(query, queryOption as unknown as QueryOption<T>)) as Repository<T, AutoSet>['select'],
-		selectOne: ((query: CompareQuery<T>) => selectOne(query, queryOption as unknown as QueryOption<T>)) as Repository<T, AutoSet>['selectOne'],
+		selectOne: ((query: CompareQuery<T>, selectOptions?: SelectOption<T>) => 
+			selectOne(query, queryOption as unknown as QueryOption<T>, undefined, selectOptions)) as Repository<T, AutoSet>['selectOne'],
 		insert: ((objs: Array<Omit<T, AutoSet>>) => insert(objs, queryOption as unknown as QueryOption<Omit<T, AutoSet>>)) as Repository<T, AutoSet>['insert'],
 		update: ((updates: Array<[CompareQuery<T>, Partial<Omit<T, AutoSet>>]>) => update(updates, queryOption as unknown as QueryOption<Omit<T, AutoSet>>)) as Repository<T, AutoSet>['update'],
 		delete: ((query: CompareQuery<T>) => delete_(query, queryOption as unknown as QueryOption<T>)) as Repository<T, AutoSet>['delete'],

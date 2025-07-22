@@ -126,13 +126,8 @@ const select = async <T>(
 		selectClause = selectParts.join(', ');
 	}
 
-	if (!query || Object.keys(query).length === 0) {
-		query_ = `SELECT ${selectClause} FROM ${mysql2.format('??', [option.table])}`;
-	} else {
-		const { conditions, values: whereValues } = where(query, option);
-		query_ = `SELECT ${selectClause} FROM ${mysql2.format('??', [option.table])} WHERE ${conditions}`;
-		values = whereValues;
-	}
+	// 기본 쿼리 구성 (SELECT ... FROM table)
+	query_ = `SELECT ${selectClause} FROM ${mysql2.format('??', [option.table])}`;
 
 	// Enhanced Relations JOIN 처리 (새로운 기능)
 	const relationJoins = buildRelationJoins(
@@ -147,8 +142,15 @@ const select = async <T>(
 		...relationJoins
 	];
 
-	// JOIN 절 추가
+	// JOIN 절 추가 (WHERE 절보다 먼저)
 	query_ += buildJoinClause(allJoins);
+
+	// WHERE 절 추가 (JOIN 절 다음에)
+	if (query && Object.keys(query).length > 0) {
+		const { conditions, values: whereValues } = where(query, option);
+		query_ += ` WHERE ${conditions}`;
+		values = whereValues;
+	}
 	query_ += orderBy(selectOptions?.orderBy);
 	query_ += limit(selectOptions);
 	option.printQueryIfNeeded?.(query_);
@@ -320,8 +322,8 @@ const selectOne = async <T>(
 		selectClause = selectParts.join(', ');
 	}
 
-	const { conditions, values } = where(query, option);
-	let query_ = `SELECT ${selectClause} FROM ${mysql2.format('??', [option.table])} WHERE ${conditions}`;
+	// 기본 쿼리 구성 (SELECT ... FROM table)
+	let query_ = `SELECT ${selectClause} FROM ${mysql2.format('??', [option.table])}`;
 
 	// Enhanced Relations JOIN 처리
 	const relationJoins = buildRelationJoins(
@@ -336,8 +338,12 @@ const selectOne = async <T>(
 		...relationJoins
 	];
 
-	// JOIN 절 추가
+	// JOIN 절 추가 (WHERE 절보다 먼저)
 	query_ += buildJoinClause(allJoins);
+
+	// WHERE 절 추가 (JOIN 절 다음에)
+	const { conditions, values } = where(query, option);
+	query_ += ` WHERE ${conditions}`;
 
 	// ORDER BY 절 추가
 	query_ += orderBy(selectOptions?.orderBy);
@@ -363,21 +369,23 @@ const selectOne = async <T>(
 		const result = { ...mainData } as any;
 		
 		for (const relationName of selectOptions.withRelations!) {
-			const relation = option.relations![relationName];
-			if (relation && relation.keys && relation.keys.length > 0) {
-				const relationData: any = {};
-				
-				// 관계 테이블의 컬럼들을 추출
-				relation.keys.forEach((key: string) => {
-					const snakeKey = convertToSnakeString(key);
-					if (row[snakeKey] !== undefined) {
-						relationData[key] = row[snakeKey];
+			const relation: Relation = option.relations![relationName];
+			if (relation && relation.keys) {
+				// 관계 테이블의 컬럼들을 확인해서 데이터가 있는지 검사
+				let hasRelationData = false;
+				for (const key of relation.keys) {
+					const snakeKey = convertToSnakeString(String(key));
+					if (row[snakeKey] !== undefined && row[snakeKey] !== null) {
+						hasRelationData = true;
+						break; // 하나라도 데이터가 있으면 충분
 					}
-				});
+				}
 				
 				// 관계 데이터가 있는 경우에만 추가
-				if (Object.keys(relationData).length > 0) {
-					result[relationName] = relationData;
+				if (hasRelationData) {
+					// toObject 함수를 사용해서 relation 데이터 구성
+					const relationDataConverted = toObject(relation.keys as string[], row);
+					result[relationName] = relationDataConverted;
 				} else {
 					result[relationName] = null;
 				}
