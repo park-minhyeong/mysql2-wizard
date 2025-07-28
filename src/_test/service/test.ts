@@ -4,22 +4,22 @@ import { ResultSetHeader } from "../../config";
 import { CompareQuery } from "../..";
 import { Test, TestAutoSetKeys, TestCreate, testKeys, TestUpdate } from "../interface/Test";
 
-interface TestJoin{
-  test_id:number;
-  name:string;
+interface TestJoin {
+  test_id: number;
+  name: string;
 }
 
 const pack = repository<Test, TestAutoSetKeys>({
   table: "test",
   keys: testKeys,
   printQuery: true,
-  relations:{
-    testJoins:{
-      table:"test_join",
-      keys:["testId","title"],
-      localKey:"id",
-      foreignKey:"testId",
-      type:"hasOne"
+  relations: {
+    testJoins: {
+      table: "test_join",
+      keys: ["testId", "title"],
+      localKey: "id",
+      foreignKey: "testId",
+      type: "hasOne"
     }
   }
 });
@@ -27,9 +27,9 @@ const pack = repository<Test, TestAutoSetKeys>({
 async function read(): Promise<Test[]>;
 async function read(id: number): Promise<Test | undefined>;
 async function read(id?: number): Promise<Test[] | Test | undefined> {
-  if (!id) return pack.select().with("testJoins").orderBy([{ column: 'title', direction: 'ASC' },{ column: 'id', direction: 'DESC' }]).limit(40);
+  if (!id) return pack.select().with("testJoins").orderBy([{ column: 'title', direction: 'ASC' }, { column: 'id', direction: 'DESC' }]).limit(40);
   return pack.selectOne({ id }).with("testJoins");
-} 
+}
 
 async function create(testCreates: TestCreate[]): Promise<ResultSetHeader> {
   return pack.insert(testCreates);
@@ -40,7 +40,7 @@ const update = async (updates: [CompareQuery<Test>, TestUpdate][]) => {
 };
 
 const delete_ = async () => {
-  return pack.delete({ id:{operator:"<", value:60} });
+  return pack.delete([{ id: 75 }, { id: 76 }]);
 };
 
 const novelService = {

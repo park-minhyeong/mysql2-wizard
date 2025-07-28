@@ -30,7 +30,7 @@ function repository<T, AutoSet extends keyof T = never>(
 		selectOne: ((query: CompareQuery<T>) => new SelectOneQueryBuilder(query, queryOption as unknown as QueryOption<T>)) as Repository<T, AutoSet>['selectOne'],
 		insert: ((objs: Array<Omit<T, AutoSet>>) => insert(objs, queryOption as unknown as QueryOption<Omit<T, AutoSet>>)) as Repository<T, AutoSet>['insert'],
 		update: ((updates: Array<[CompareQuery<T>, Partial<Omit<T, AutoSet>>]>) => update(updates, queryOption as unknown as QueryOption<Omit<T, AutoSet>>)) as Repository<T, AutoSet>['update'],
-		delete: ((query: CompareQuery<T>) => delete_(query, queryOption as unknown as QueryOption<T>)) as Repository<T, AutoSet>['delete'],
+		delete: ((deletes: CompareQuery<T>[]) => delete_(deletes, queryOption as unknown as QueryOption<T>)) as Repository<T, AutoSet>['delete'],
 	};
 }
 

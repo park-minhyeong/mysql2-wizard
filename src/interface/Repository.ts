@@ -32,5 +32,5 @@ export interface Repository<T, AutoSet extends keyof T = never> {
 	selectOne(query: CompareQuery<T>): ISelectOneQueryBuilder<T>;
 	insert(objs: Array<Omit<T, AutoSet>>, option?: QueryOption<Omit<T, AutoSet>>): Promise<ResultSetHeader>;
 	update(updates: Array<[CompareQuery<T>, Partial<Omit<T, AutoSet>>]>, option?: QueryOption<Omit<T, AutoSet>>): Promise<ResultSetHeader>;
-	delete(query: CompareQuery<T>, option?: QueryOption<T>): Promise<ResultSetHeader>;
+	delete(deletes: CompareQuery<T>[], option?: QueryOption<T>): Promise<ResultSetHeader>;
 }

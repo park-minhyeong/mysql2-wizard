@@ -9,14 +9,18 @@ const queryString = <T>({ table }: QueryOption<T>) => ({
 });
 
 const delete_ = async <T>(
-	query: CompareQuery<T>,
+	queries: CompareQuery<T>[],
 	option: QueryOption<T>
 ): Promise<ResultSetHeader> => handler(async connection => {
-	const { conditions, values } = where(query, option);
-	const query_ = queryString(option).delete + conditions;
-	option.printQueryIfNeeded?.(query_);
-	const [result] = await connection.query<ResultSetHeader>(query_, values);
-	return result;
+	let totalAffectedRows = 0;
+	for (const query of queries) {
+		const { conditions, values } = where(query, option);
+		const query_ = queryString(option).delete + conditions;
+		option.printQueryIfNeeded?.(query_);
+		const [result] = await connection.query<ResultSetHeader>(query_, values);
+		totalAffectedRows += result.affectedRows;
+	}
+	return { affectedRows: totalAffectedRows } as ResultSetHeader;
 });
 
 export { delete_ };
