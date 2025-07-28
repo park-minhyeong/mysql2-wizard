@@ -5,10 +5,11 @@ const defaultRouter = express.Router();
 
 defaultRouter.get("/", async (req, res) => {
   try {
-    const novels = await novelService.read(64);
+    const novels = await novelService.read();
     return res.json(novels);
   } catch (error) {
     console.log(error);
+    return res.status(500).json({ error });
   }
 });
 defaultRouter.post("/", async (req, res) => {

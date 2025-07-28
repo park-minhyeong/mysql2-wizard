@@ -13,22 +13,22 @@ const pack = repository<Test, TestAutoSetKeys>({
   table: "test",
   keys: testKeys,
   printQuery: true,
-  relations: {
-    testJoins: {
-      table: "test_join",
-      keys: ["testId", "title"],
-      localKey: "id",
-      foreignKey: "testId",
-      type: "hasOne"
-    }
-  }
+  // relations: {
+  //   testJoins: {
+  //     table: "test_join",
+  //     keys: ["testId", "title"],
+  //     localKey: "id",
+  //     foreignKey: "testId",
+  //     type: "hasOne"
+  //   }
+  // }
 });
 
 async function read(): Promise<Test[]>;
 async function read(id: number): Promise<Test | undefined>;
 async function read(id?: number): Promise<Test[] | Test | undefined> {
-  if (!id) return pack.select().with("testJoins").orderBy([{ column: 'title', direction: 'ASC' }, { column: 'id', direction: 'DESC' }]).limit(40);
-  return pack.selectOne({ id }).with("testJoins");
+  if (!id) return pack.select().join("test_join", "test_join.testId", "test.id").select(['test.id', 'test.title', 'test_join.title']).orderBy([{ column: 'title', direction: 'ASC' }, { column: 'id', direction: 'DESC' }]).limit(40);
+  return pack.selectOne({ id });
 }
 
 async function create(testCreates: TestCreate[]): Promise<ResultSetHeader> {
