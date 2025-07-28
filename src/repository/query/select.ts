@@ -6,9 +6,8 @@ import { ISelectQueryBuilder, ISelectOneQueryBuilder } from '../../interface/Rep
 import where from './condition/where';
 import orderBy from './option/orderBy';
 import limit from './option/limit';
-import buildJoinClause from './option/join';
+import buildJoinClause, { buildRelationJoins } from './relation/join';
 import buildSelectClause from './select.support';
-import buildRelationJoins from './option/relations';
 import { convertToSnakeString, toObject } from '../../utils';
 
 const queryString = <T>({ table }: QueryOption<T>) => ({
@@ -23,7 +22,7 @@ export class SelectQueryBuilder<T> implements ISelectQueryBuilder<T> {
 	private selectColumns: string[] = [];
 	private withRelations: string[] = [];  // Enhanced Relations용 (새로 추가)
 
-	constructor(private query: CompareQuery<T> | undefined, private option: QueryOption<T>) {}
+	constructor(private query: CompareQuery<T> | undefined, private option: QueryOption<T>) { }
 
 	orderBy(orderByArray: OrderBy<T>): ISelectQueryBuilder<T> {
 		this.selectOptions.orderBy = orderByArray;
@@ -81,7 +80,7 @@ export class SelectOneQueryBuilder<T> implements ISelectOneQueryBuilder<T> {
 	private selectColumns: string[] = [];
 	private withRelations: string[] = [];
 
-	constructor(private query: CompareQuery<T>, private option: QueryOption<T>) {}
+	constructor(private query: CompareQuery<T>, private option: QueryOption<T>) { }
 
 	orderBy(orderByArray: OrderBy<T>): ISelectOneQueryBuilder<T> {
 		this.selectOptions.orderBy = orderByArray;
@@ -123,8 +122,8 @@ export class SelectOneQueryBuilder<T> implements ISelectOneQueryBuilder<T> {
 }
 
 const select = async <T>(
-	query: CompareQuery<T> | undefined, 
-	option: QueryOption<T>, 
+	query: CompareQuery<T> | undefined,
+	option: QueryOption<T>,
 	selectOptions?: SelectOption<T>
 ): Promise<T[]> => handler(async connection => {
 	let query_: string;
@@ -132,24 +131,24 @@ const select = async <T>(
 
 	// SELECT 절 구성 - keys 기반 향상된 버전
 	let selectClause: string;
-	
+
 	if (selectOptions?.selectColumns && selectOptions.selectColumns.length > 0) {
 		// 명시적 컬럼 지정
 		selectClause = buildSelectClause(selectOptions.selectColumns, option.table);
 	} else {
 		// keys 기반 자동 구성
 		const selectParts: string[] = [];
-		
+
 		// 메인 테이블의 keys 기반 컬럼
 		if (option.keys && option.keys.length > 0) {
-			const mainColumns = option.keys.map(key => 
+			const mainColumns = option.keys.map(key =>
 				`${mysql2.format('??', [option.table])}.${mysql2.format('??', [key])}`
 			);
 			selectParts.push(...mainColumns);
 		} else {
 			selectParts.push(`${mysql2.format('??', [option.table])}.*`);
 		}
-		
+
 		// Enhanced Relations의 keys 기반 컬럼
 		if (selectOptions?.withRelations && option.relations) {
 			for (const relationName of selectOptions.withRelations) {
@@ -171,7 +170,7 @@ const select = async <T>(
 				}
 			}
 		}
-		
+
 		selectClause = selectParts.join(', ');
 	}
 
@@ -180,8 +179,8 @@ const select = async <T>(
 
 	// Enhanced Relations JOIN 처리 (새로운 기능)
 	const relationJoins = buildRelationJoins(
-		selectOptions?.withRelations, 
-		option.relations, 
+		selectOptions?.withRelations,
+		option.relations,
 		option.table
 	);
 
@@ -204,11 +203,11 @@ const select = async <T>(
 	query_ += limit(selectOptions);
 	option.printQueryIfNeeded?.(query_);
 	const [rows] = await connection.query<RowDataPacket[]>(query_, values);
-	
+
 	// 조인이 사용된 경우 중첩 객체로 구성
 	const hasWithRelations = selectOptions?.withRelations && selectOptions.withRelations.length > 0;
 	const hasJoins = (selectOptions?.joins && selectOptions.joins.length > 0) || hasWithRelations;
-	
+
 	// Enhanced Relations가 사용된 경우에만 중첩 구조 적용
 	if (hasWithRelations && option.relations) {
 		// hasMany 관계가 있는 경우 그룹화 처리 필요
@@ -220,14 +219,14 @@ const select = async <T>(
 		if (hasHasManyRelations) {
 			// 메인 레코드별로 그룹화
 			const groupedByMain = new Map<string, any>();
-			
+
 			for (const row of rows) {
 				const mainData = option.toObject(row);
 				const mainKey = JSON.stringify(mainData); // 메인 데이터로 키 생성
-				
+
 				if (!groupedByMain.has(mainKey)) {
 					const result = { ...mainData } as any;
-					
+
 					// 각 관계별로 초기화
 					for (const relationName of selectOptions.withRelations!) {
 						const relation = option.relations![relationName];
@@ -239,19 +238,19 @@ const select = async <T>(
 							}
 						}
 					}
-					
+
 					groupedByMain.set(mainKey, result);
 				}
-				
+
 				const mainRecord = groupedByMain.get(mainKey)!;
-				
+
 				// 각 관계별로 데이터 추가
 				for (const relationName of selectOptions.withRelations!) {
 					const relation: Relation = option.relations![relationName];
 					if (relation && relation.keys) {
 						const relationData: any = {};
 						let hasRelationData = false;
-						
+
 						// 관계 테이블의 컬럼들을 확인해서 데이터가 있는지 검사 (별칭 사용)
 						for (const key of relation.keys) {
 							const snakeKey = convertToSnakeString(String(key));
@@ -261,7 +260,7 @@ const select = async <T>(
 								break; // 하나라도 데이터가 있으면 충분
 							}
 						}
-						
+
 						if (hasRelationData) {
 							// 별칭된 데이터를 원래 키로 매핑해서 toObject에 전달
 							const relationRowData: Record<string, any> = {};
@@ -274,7 +273,7 @@ const select = async <T>(
 							const relationDataConverted = toObject(relation.keys as string[], relationRowData);
 							if (relation.type === 'hasMany') {
 								// hasMany인 경우 배열에 추가 (중복 체크)
-								const existing = mainRecord[relationName].find((item: any) => 
+								const existing = mainRecord[relationName].find((item: any) =>
 									JSON.stringify(item) === JSON.stringify(relationDataConverted)
 								);
 								if (!existing) {
@@ -288,18 +287,18 @@ const select = async <T>(
 					}
 				}
 			}
-			
+
 			return Array.from(groupedByMain.values());
 		} else {
-					// hasMany 관계가 없는 경우 기존 로직 사용
-		return rows.map(row => {
-			// 메인 테이블 데이터
-			const mainData = option.toObject(row);
-			
-			// 각 관계별로 중첩 객체 구성
-			const result = { ...mainData } as any;
-			
-							for (const relationName of selectOptions.withRelations!) {
+			// hasMany 관계가 없는 경우 기존 로직 사용
+			return rows.map(row => {
+				// 메인 테이블 데이터
+				const mainData = option.toObject(row);
+
+				// 각 관계별로 중첩 객체 구성
+				const result = { ...mainData } as any;
+
+				for (const relationName of selectOptions.withRelations!) {
 					const relation: Relation = option.relations![relationName];
 					if (relation && relation.keys) {
 						// 관계 테이블의 컬럼들을 확인해서 데이터가 있는지 검사 (별칭 사용)
@@ -312,7 +311,7 @@ const select = async <T>(
 								break; // 하나라도 데이터가 있으면 충분
 							}
 						}
-						
+
 						// 관계 데이터가 있는 경우에만 추가
 						if (hasRelationData) {
 							// 별칭된 데이터를 원래 키로 매핑해서 toObject에 전달
@@ -330,11 +329,11 @@ const select = async <T>(
 						}
 					}
 				}
-			return result;
-		});
+				return result;
+			});
 		}
 	}
-	
+
 	// 기존 동작: 단순 JOIN이나 관계 없는 경우
 	return rows.map(row => option.toObject(row));
 });
@@ -346,24 +345,24 @@ const selectOne = async <T>(
 ): Promise<T | undefined> => handler(async connection => {
 	// SELECT 절 구성 - select 함수와 동일한 로직 적용
 	let selectClause: string;
-	
+
 	if (selectOptions?.selectColumns && selectOptions.selectColumns.length > 0) {
 		// 명시적 컬럼 지정
 		selectClause = buildSelectClause(selectOptions.selectColumns, option.table);
 	} else {
 		// keys 기반 자동 구성
 		const selectParts: string[] = [];
-		
+
 		// 메인 테이블의 keys 기반 컬럼
 		if (option.keys && option.keys.length > 0) {
-			const mainColumns = option.keys.map(key => 
+			const mainColumns = option.keys.map(key =>
 				`${mysql2.format('??', [option.table])}.${mysql2.format('??', [key])}`
 			);
 			selectParts.push(...mainColumns);
 		} else {
 			selectParts.push(`${mysql2.format('??', [option.table])}.*`);
 		}
-		
+
 		// Enhanced Relations의 keys 기반 컬럼
 		if (selectOptions?.withRelations && option.relations) {
 			for (const relationName of selectOptions.withRelations) {
@@ -384,7 +383,7 @@ const selectOne = async <T>(
 				}
 			}
 		}
-		
+
 		selectClause = selectParts.join(', ');
 	}
 
@@ -393,8 +392,8 @@ const selectOne = async <T>(
 
 	// Enhanced Relations JOIN 처리
 	const relationJoins = buildRelationJoins(
-		selectOptions?.withRelations, 
-		option.relations, 
+		selectOptions?.withRelations,
+		option.relations,
 		option.table
 	);
 
@@ -430,10 +429,10 @@ const selectOne = async <T>(
 		const row = rows[0];
 		// 메인 테이블 데이터
 		const mainData = option.toObject(row);
-		
+
 		// 각 관계별로 중첩 객체 구성
 		const result = { ...mainData } as any;
-		
+
 		for (const relationName of selectOptions.withRelations!) {
 			const relation: Relation = option.relations![relationName];
 			if (relation && relation.keys) {
@@ -447,7 +446,7 @@ const selectOne = async <T>(
 						break; // 하나라도 데이터가 있으면 충분
 					}
 				}
-				
+
 				// 관계 데이터가 있는 경우에만 추가
 				if (hasRelationData) {
 					// 별칭된 데이터를 원래 키로 매핑해서 toObject에 전달
@@ -465,7 +464,7 @@ const selectOne = async <T>(
 				}
 			}
 		}
-		
+
 		return result;
 	}
 
