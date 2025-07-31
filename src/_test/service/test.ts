@@ -1,8 +1,13 @@
-
 import { repository } from "../../repository/index";
 import { ResultSetHeader } from "../../config";
 import { CompareQuery } from "../..";
-import { Test, TestAutoSetKeys, TestCreate, testKeys, TestUpdate } from "../interface/Test";
+import {
+  Test,
+  TestAutoSetKeys,
+  TestCreate,
+  testKeys,
+  TestUpdate,
+} from "../interface/Test";
 
 interface TestJoin {
   test_id: number;
@@ -27,7 +32,7 @@ const pack = repository<Test, TestAutoSetKeys>({
 async function read(): Promise<Test[]>;
 async function read(id: number): Promise<Test | undefined>;
 async function read(id?: number): Promise<Test[] | Test | undefined> {
-  if (!id) return pack.select().join("test_join", "test_join.testId", "test.id").select(['test.id', 'test.title', 'test_join.title']).orderBy([{ column: 'title', direction: 'ASC' }, { column: 'id', direction: 'DESC' }]).limit(40);
+  if (!id) return pack.select().limit(40);
   return pack.selectOne({ id });
 }
 
