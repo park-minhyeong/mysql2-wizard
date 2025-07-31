@@ -1,7 +1,7 @@
 {
 	"name": "mysql2-wizard",
 	"description": "no repository in server",
-	"version": "2.0.6",
+	"version": "2.0.7",
 	"main": "index.js",
 	"scripts": {
 		"dev": "nodemon --experimental-specifier-resolution=node src/_test/app/index.ts",
