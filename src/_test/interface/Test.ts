@@ -1,4 +1,4 @@
-export const testKeys = ['id', 'title', 'content', 'snakeCase', 'isValid', 'isPublic', 'json', 'jsonArray', 'enumType', 'ask', 'askType', 'difficulty', 'accuracy', 'createdUserId', 'progress', 'createdAt', 'updatedAt'] as const
+export const testKeys = ['id', 'title', 'content', 'snakeCase', 'isValid', 'isPublic', 'json', 'jsonArray', 'enumType', 'createdAt', 'updatedAt'] as const
 export interface Test {
   id: number;
   title: string;
@@ -9,12 +9,6 @@ export interface Test {
 	json: object | null;
 	jsonArray: object[] | null;
 	enumType: 'A' | 'B' | 'C';
-	ask: object | null;  // JSON 필드
-	askType: string;
-	difficulty: number;
-	accuracy: number;
-	createdUserId: number;
-	progress: string;
 	createdAt: Date;
 	updatedAt: Date;
 }
