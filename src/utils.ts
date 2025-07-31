@@ -9,7 +9,26 @@ const isJsonString = (str: string): boolean => {
   const trimmed = str.trim();
   if (trimmed === '') return false;
   
-  // JSON 객체나 배열로 시작하는지 확인
+  // 이스케이프된 JSON 문자열 처리 (예: "{\"a\":\"asdf\"}")
+  if (trimmed.startsWith('"') && trimmed.endsWith('"')) {
+    try {
+      // 이스케이프된 문자열을 파싱
+      const unescaped = JSON.parse(trimmed);
+      // 파싱된 결과가 다시 JSON 문자열인지 확인
+      if (typeof unescaped === 'string') {
+        const innerTrimmed = unescaped.trim();
+        if ((innerTrimmed.startsWith('{') && innerTrimmed.endsWith('}')) || 
+            (innerTrimmed.startsWith('[') && innerTrimmed.endsWith(']'))) {
+          JSON.parse(unescaped);
+          return true;
+        }
+      }
+    } catch {
+      // 이스케이프된 문자열이 아니거나 내부가 JSON이 아닌 경우
+    }
+  }
+  
+  // 일반 JSON 객체나 배열로 시작하는지 확인
   if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || 
       (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
     try {
@@ -34,7 +53,19 @@ const toObject = <T>(keys: string[], row: Record<string, any>): T => {
 		} else if (typeof value === 'string' && value !== null && isJsonString(value)) {
 			// 모든 문자열 필드에 대해 JSON 파싱 시도
 			try {
-				result[key] = JSON.parse(value);
+				const trimmed = value.trim();
+				// 이스케이프된 JSON 문자열 처리
+				if (trimmed.startsWith('"') && trimmed.endsWith('"')) {
+					const unescaped = JSON.parse(trimmed);
+					if (typeof unescaped === 'string') {
+						result[key] = JSON.parse(unescaped);
+					} else {
+						result[key] = unescaped;
+					}
+				} else {
+					// 일반 JSON 파싱
+					result[key] = JSON.parse(value);
+				}
 			} catch (error) {
 				result[key] = value;
 			}
