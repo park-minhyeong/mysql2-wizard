@@ -1,7 +1,7 @@
 import { ToRowOption } from "./interface";
 
 const IS_FIELD_REGEX = /^is_/;
-const JSON_FIELD_REGEX = /json/i; // JSON 필드 식별용 정규식
+const JSON_FIELD_REGEX = /(json|ask)/i; // JSON 필드 식별용 정규식 (ask 필드 포함)
 const toObject = <T>(keys: string[], row: Record<string, any>): T => {
 	const snakeKeys = convertToSnakeStrings([...keys]);
 	const result = {} as Record<string, unknown>;
@@ -13,7 +13,13 @@ const toObject = <T>(keys: string[], row: Record<string, any>): T => {
 			result[key] = toBoolean(value);
 		} else if (JSON_FIELD_REGEX.test(key) && typeof value === 'string' && value !== null) {
 			try {
-				result[key] = JSON.parse(value);
+				// JSON 문자열인지 확인 (중괄호나 대괄호로 시작하는지)
+				if ((value.trim().startsWith('{') && value.trim().endsWith('}')) || 
+					(value.trim().startsWith('[') && value.trim().endsWith(']'))) {
+					result[key] = JSON.parse(value);
+				} else {
+					result[key] = value;
+				}
 			} catch (error) {
 				result[key] = value;
 			}

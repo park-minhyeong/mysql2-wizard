@@ -51,6 +51,7 @@ const readEnv = () => {
   const multipleStatements = readBooleanEnv(process.env, 'DB_MULTIPLE_STATEMENTS', false);
   const debug = readBooleanEnv(process.env, 'DB_DEBUG', false);
   const castedBoolean = readBooleanEnv(process.env, 'CASTED_BOOLEAN', false);
+  const enableMariaDbJson = readBooleanEnv(process.env, 'ENABLE_MARIADB_JSON', false);
 
   return {
     host,
@@ -67,6 +68,21 @@ const readEnv = () => {
       if (field.type === "TINY" && field.length === 1 && castedBoolean) {
         return field.string() === "1"; // 1 = true, 0 = false
       }
+      
+      // MariaDB JSON 필드 처리 (환경 변수로 활성화)
+      if (enableMariaDbJson && (field.type === "JSON" || field.type === "BLOB")) {
+        const value = field.string();
+        if (value === null || value === undefined) {
+          return null;
+        }
+        try {
+          return JSON.parse(value);
+        } catch (error) {
+          // JSON 파싱 실패 시 원본 문자열 반환
+          return value;
+        }
+      }
+      
       return next();
     },
   };
