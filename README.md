@@ -7,12 +7,15 @@ A modern TypeScript-based MySQL database utility package that provides an enhanc
 - 🔗 **Fluent Chainable API** - Modern query building with method chaining
 - 🛡️ **Type-safe operations** - Full TypeScript support with compile-time safety
 - 🔄 **Auto snake_case conversion** - Seamless camelCase ↔ snake_case mapping
-- 📦 **JSON handling** - Automatic JSON serialization/deserialization
+- 📦 **JSON handling** - Automatic JSON serialization/deserialization (MySQL & MariaDB)
 - 🎯 **Complex queries** - Support for IN, LIKE, comparison operators
 - 🏊 **Connection pooling** - Built-in connection pool management
 - 🏗️ **Repository pattern** - Clean architecture with auto-set columns
 - 💫 **Promise-like queries** - Use `await` anywhere in the chain
 - 🔀 **Batch operations** - Efficient bulk insert/update operations
+- 🔗 **Relations** - hasOne, hasMany, belongsTo relationships with automatic JOINs
+- 🔧 **JOIN operations** - Manual JOIN support with type safety
+- 📊 **Enhanced querying** - Select specific columns, pagination, ordering
 
 ## 📦 Installation
 
@@ -84,6 +87,28 @@ const users = await userRepo
 const orderedUsers = await userRepo
   .select({ email: { operator: 'LIKE', value: '%@gmail.com' } })
   .orderBy([{ column: 'name', direction: 'ASC' }]);
+
+// Execute method for explicit execution
+const explicitUsers = await userRepo
+  .select({ isActive: true })
+  .orderBy([{ column: 'name', direction: 'ASC' }])
+  .execute();
+
+// JOIN operations
+const usersWithProfiles = await userRepo
+  .select({ isActive: true })
+  .join('user_profiles', 'id', 'userId', 'LEFT')
+  .select(['id', 'name', 'email', 'bio'])
+  .execute();
+
+// Multiple JOINs
+const complexQuery = await userRepo
+  .select({ isActive: true })
+  .join('user_profiles', 'id', 'userId', 'LEFT')
+  .join('user_roles', 'id', 'userId', 'INNER')
+  .select(['id', 'name', 'email', 'bio', 'role_name'])
+  .orderBy([{ column: 'name', direction: 'ASC' }])
+  .limit(10);
 ```
 
 ## 🎯 Complex Query Conditions
@@ -144,6 +169,12 @@ const searchResults = await userRepo
   })
   .orderBy([{ column: 'createdAt', direction: 'DESC' }])
   .limit(5);
+
+// SelectOne with chaining
+const singleUser = await userRepo
+  .selectOne({ email: 'john@example.com' })
+  .select(['id', 'name', 'email'])
+  .execute();
 ```
 
 ### Update
@@ -161,15 +192,19 @@ const updateResult = await userRepo.update([
 
 ```typescript
 // Delete with conditions
-const deleteResult = await userRepo.delete({
-  isActive: false,
-  createdAt: { operator: '<', value: new Date('2023-01-01') }
-});
+const deleteResult = await userRepo.delete([
+  { isActive: false },
+  { createdAt: { operator: '<', value: new Date('2023-01-01') } }
+]);
 
 // Delete by ID list
-const bulkDelete = await userRepo.delete({
-  id: [1, 2, 3, 4, 5]
-});
+const bulkDelete = await userRepo.delete([
+  { id: 1 },
+  { id: 2 },
+  { id: 3 },
+  { id: 4 },
+  { id: 5 }
+]);
 ```
 
 ## 🔧 Advanced Features
@@ -182,6 +217,7 @@ interface Product {
   name: string;
   specifications: object;      // Auto JSON handling
   tags: string[];             // Auto JSON array handling
+  ask: object;                // Any field with JSON content
 }
 
 const product = await productRepo.insert([{
@@ -191,12 +227,82 @@ const product = await productRepo.insert([{
     ram: '16GB',
     storage: '512GB SSD'
   },
-  tags: ['electronics', 'computers'] // Automatically serialized
+  tags: ['electronics', 'computers'], // Automatically serialized
+  ask: { a: 'asdf' }          // Any JSON object
 }]);
 
 // Retrieved data is automatically deserialized back to objects
 const retrieved = await productRepo.selectOne({ id: product.insertId });
 console.log(retrieved.specifications.cpu); // 'Intel i7'
+console.log(retrieved.ask.a); // 'asdf'
+
+// Supports both MySQL and MariaDB JSON formats
+// MySQL: {"a":"asdf"}
+// MariaDB: "{\"a\":\"asdf\"}"
+```
+
+### Relations (Enhanced)
+
+```typescript
+interface User {
+  id: number;
+  name: string;
+  email: string;
+  isActive: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+interface Post {
+  id: number;
+  title: string;
+  content: string;
+  userId: number;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+// Repository with relations
+const userRepo = repository<User, 'id' | 'createdAt' | 'updatedAt'>({
+  table: 'users',
+  keys: ['id', 'name', 'email', 'isActive', 'createdAt', 'updatedAt'],
+  relations: {
+    posts: {
+      table: 'posts',
+      localKey: 'id',
+      foreignKey: 'userId',
+      type: 'hasMany',
+      keys: ['id', 'title', 'content', 'userId', 'createdAt', 'updatedAt']
+    },
+    profile: {
+      table: 'user_profiles',
+      localKey: 'id',
+      foreignKey: 'userId',
+      type: 'hasOne',
+      keys: ['id', 'userId', 'bio', 'avatar']
+    }
+  }
+});
+
+// Query with relations
+const userWithPosts = await userRepo
+  .selectOne({ id: 1 })
+  .with('posts')
+  .with('profile')
+  .execute();
+
+console.log(userWithPosts);
+// {
+//   id: 1,
+//   name: 'John Doe',
+//   email: 'john@example.com',
+//   isActive: true,
+//   posts: [
+//     { id: 1, title: 'First Post', content: 'Hello World', userId: 1 },
+//     { id: 2, title: 'Second Post', content: 'Another post', userId: 1 }
+//   ],
+//   profile: { id: 1, userId: 1, bio: 'Software Developer', avatar: 'avatar.jpg' }
+// }
 ```
 
 ### Custom Service Layer
