@@ -48,40 +48,12 @@ const delete_ = async () => {
   return pack.delete([{ id: 75 }, { id: 76 }]);
 };
 
-const testEscapedJson = async () => {
-  // 이스케이프된 JSON 문자열 테스트
-  const testData = await pack.insert([{
-    title: 'Test Escaped JSON',
-    content: 'Testing escaped JSON string parsing',
-    snakeCase: 'test_escaped',
-    isValid: true,
-    isPublic: false,
-    json: { test: 'data' },
-    jsonArray: [{ item: 1 }, { item: 2 }],
-    enumType: 'A',
-    ask: { a: 'asdf' },  // JSON 객체
-    askType: 'test',
-    difficulty: 1,
-    accuracy: 1,
-    createdUserId: 1,
-    progress: 'activating'
-  }]);
-  
-  // 조회해서 JSON이 파싱되었는지 확인
-  const retrieved = await pack.selectOne({ id: testData.insertId });
-  console.log('=== Escaped JSON Test Results ===');
-  console.log('ask field:', retrieved?.ask, 'type:', typeof retrieved?.ask);
-  console.log('json field:', retrieved?.json, 'type:', typeof retrieved?.json);
-  
-  return retrieved;
-};
 
 const novelService = {
   read,
   create,
   update,
   delete: delete_,
-  testEscapedJson,
 };
 
 export default novelService;

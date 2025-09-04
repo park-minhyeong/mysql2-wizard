@@ -95,6 +95,10 @@ const toRow = <T>(keys: readonly string[], obj: T, autoSetKeys: readonly string[
 		const snakeKey = convertToSnakeString(key);
 		// is_ 접두사가 있는 필드를 DB boolean(1/0)으로 변환
 		if (IS_FIELD_REGEX.test(snakeKey)) {
+			// undefined 값인 is_ 필드는 제외 (UPDATE 시에만 해당)
+			if (value === undefined) {
+				return acc; // undefined인 is_ 필드는 결과에 포함하지 않음
+			}
 			acc[snakeKey] = toDbBoolean(value);
 		} else {
 			acc[snakeKey] = value;
@@ -114,6 +118,7 @@ const toDbBoolean = (value: any): 1 | 0 => {
 	if (typeof value === 'boolean') return value ? 1 : 0;
 	if (value === 1 || value === '1') return 1;
 	if (value === 0 || value === '0') return 0;
+	if (value === undefined || value === null) return 0; // undefined/null을 명시적으로 0으로 처리
 	return Boolean(value) ? 1 : 0;
 };
 export { toObject, toRow, toBoolean, toDbBoolean }
