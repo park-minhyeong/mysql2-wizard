@@ -196,8 +196,10 @@ const select = async <T>(
 	// WHERE 절 추가 (JOIN 절 다음에)
 	if (query && Object.keys(query).length > 0) {
 		const { conditions, values: whereValues } = where(query, option);
-		query_ += ` WHERE ${conditions}`;
-		values = whereValues;
+		if (conditions.trim()) { // 조건이 실제로 있는 경우에만 WHERE 절 추가
+			query_ += ` WHERE ${conditions}`;
+			values = whereValues;
+		}
 	}
 	query_ += orderBy(selectOptions?.orderBy);
 	query_ += limit(selectOptions);
@@ -408,7 +410,9 @@ const selectOne = async <T>(
 
 	// WHERE 절 추가 (JOIN 절 다음에)
 	const { conditions, values } = where(query, option);
-	query_ += ` WHERE ${conditions}`;
+	if (conditions.trim()) { // 조건이 실제로 있는 경우에만 WHERE 절 추가
+		query_ += ` WHERE ${conditions}`;
+	}
 
 	// ORDER BY 절 추가
 	query_ += orderBy(selectOptions?.orderBy);

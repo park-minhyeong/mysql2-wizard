@@ -48,12 +48,27 @@ const delete_ = async () => {
   return pack.delete([{ id: 75 }, { id: 76 }]);
 };
 
+const testUndefinedWhere = async () => {
+  // undefined 값이 포함된 WHERE 조건 테스트
+  console.log("=== Testing undefined WHERE condition ===");
+  
+  // undefined 값이 포함된 쿼리
+  const result = await pack.select({ 
+    isValid: undefined,  // undefined 값
+    isPublic: true       // 실제 값
+  }).limit(5);
+  
+  console.log("Result count:", result.length);
+  return result;
+};
+
 
 const novelService = {
   read,
   create,
   update,
   delete: delete_,
+  testUndefinedWhere,
 };
 
 export default novelService;

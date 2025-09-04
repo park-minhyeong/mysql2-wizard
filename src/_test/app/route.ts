@@ -35,5 +35,15 @@ defaultRouter.delete("/", async (req, res) => {
   return res.json(novels);
 });
 
+defaultRouter.get("/test-undefined-where", async (req, res) => {
+  try {
+    const result = await novelService.testUndefinedWhere();
+    return res.json(result);
+  } catch (error) {
+    console.log(error);
+    return res.status(500).json({ error });
+  }
+});
+
 
 export default defaultRouter;
