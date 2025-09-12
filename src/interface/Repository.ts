@@ -1,5 +1,6 @@
 import { ResultSetHeader } from 'mysql2/promise';
 import { CompareQuery, QueryOption, SelectOption, JoinType, Relations } from './Query';
+import { ExtendedResultSetHeader } from '../repository/query/insert';
 
 export interface RepositoryConfig<T> {
 	table: string;
@@ -30,7 +31,7 @@ export interface ISelectOneQueryBuilder<T> extends PromiseLike<T | undefined> {
 export interface Repository<T, AutoSet extends keyof T = never> {
 	select(query?: CompareQuery<T>): ISelectQueryBuilder<T>;
 	selectOne(query: CompareQuery<T>): ISelectOneQueryBuilder<T>;
-	insert(objs: Array<Omit<T, AutoSet>>, option?: QueryOption<Omit<T, AutoSet>>): Promise<ResultSetHeader>;
+	insert(objs: Array<Omit<T, AutoSet>>, option?: QueryOption<Omit<T, AutoSet>>): Promise<ExtendedResultSetHeader>;
 	update(updates: Array<[CompareQuery<T>, Partial<Omit<T, AutoSet>>]>, option?: QueryOption<Omit<T, AutoSet>>): Promise<ResultSetHeader>;
 	delete(deletes: CompareQuery<T>[], option?: QueryOption<T>): Promise<ResultSetHeader>;
 }

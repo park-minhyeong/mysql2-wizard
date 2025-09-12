@@ -1,6 +1,7 @@
 import { repository } from "../../repository/index";
 import { ResultSetHeader } from "../../config";
 import { CompareQuery } from "../..";
+import { ExtendedResultSetHeader } from "../../repository/query/insert";
 import {
   Test,
   TestAutoSetKeys,
@@ -36,7 +37,7 @@ async function read(id?: number): Promise<Test[] | Test | undefined> {
   return pack.selectOne({ id });
 }
 
-async function create(testCreates: TestCreate[]): Promise<ResultSetHeader> {
+async function create(testCreates: TestCreate[]): Promise<ExtendedResultSetHeader> {
   return pack.insert(testCreates);
 }
 
@@ -62,6 +63,54 @@ const testUndefinedWhere = async () => {
   return result;
 };
 
+const testBulkInsert = async () => {
+  // bulk insert 테스트 - insertIds 확인
+  console.log("=== Testing bulk insert with insertIds ===");
+  
+  const testData: TestCreate[] = [
+    {
+      title: "Bulk Test 1",
+      content: "Content 1",
+      snakeCase: "snake_case_1",
+      isValid: true,
+      isPublic: false,
+      json: { test: "data1" },
+      jsonArray: [{ item: 1 }],
+      enumType: "A"
+    },
+    {
+      title: "Bulk Test 2", 
+      content: "Content 2",
+      snakeCase: "snake_case_2",
+      isValid: false,
+      isPublic: true,
+      json: { test: "data2" },
+      jsonArray: [{ item: 2 }],
+      enumType: "B"
+    },
+    {
+      title: "Bulk Test 3",
+      content: "Content 3", 
+      snakeCase: "snake_case_3",
+      isValid: true,
+      isPublic: true,
+      json: { test: "data3" },
+      jsonArray: [{ item: 3 }],
+      enumType: "C"
+    }
+  ];
+  
+  const result = await pack.insert(testData);
+  
+  console.log("Insert result:", {
+    affectedRows: result.affectedRows,
+    insertId: result.insertId,
+    insertIds: result.insertIds  // 모든 삽입된 ID들
+  });
+  
+  return result;
+};
+
 
 const novelService = {
   read,
@@ -69,6 +118,7 @@ const novelService = {
   update,
   delete: delete_,
   testUndefinedWhere,
+  testBulkInsert,
 };
 
 export default novelService;
