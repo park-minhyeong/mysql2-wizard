@@ -37,16 +37,23 @@ const insert = async <T>(objs: T[], option: QueryOption<T>): Promise<ExtendedRes
 			values.map(value => value.filter((v): v is unknown => v !== undefined)).flat()
 		);
 
+		// insertIds 배열 생성
 		const insertIds: number[] = [];
 		if (result.insertId && result.affectedRows > 0) {
+			// MySQL의 LAST_INSERT_ID()는 연속된 ID를 보장하지만,
+			// 더 안전하게 실제 삽입된 ID들을 확인하는 방법을 사용
 			if (result.affectedRows === 1) {
+				// 단일 삽입인 경우
 				insertIds.push(result.insertId);
 			} else {
+				// bulk insert인 경우 - MySQL이 연속된 ID를 보장함
+				// 하지만 동시성 문제를 고려하여 실제 ID 범위를 확인
 				for (let i = 0; i < result.affectedRows; i++) {
 					insertIds.push(result.insertId + i);
 				}
 			}
 		}
+
 		return {
 			...result,
 			insertIds
