@@ -48,6 +48,7 @@ export interface SelectOption<T> {
 	joins?: JoinClause[];        // 새로 추가
 	selectColumns?: string[];    // 새로 추가
 	withRelations?: string[];    // Enhanced Relations용 (새로 추가)
+	orConditions?: CompareQuery<T>[];  // OR 조건들 (새로 추가)
 }
 
 // 비교 값 타입
