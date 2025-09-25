@@ -10,6 +10,9 @@ export type AutoSetColumns<T> = keyof T;
 // 비교 연산자 타입
 export type CompareOperator = '=' | '!=' | '>' | '<' | '>=' | '<=' | 'LIKE' | 'IN';
 
+// LIKE 패턴 타입
+export type LikePattern = 'starts' | 'ends' | 'contains' | 'exact';
+
 // ORDER BY 관련 타입
 export type OrderDirection = 'ASC' | 'DESC';
 export interface OrderByClause<T> {
@@ -55,7 +58,8 @@ export interface SelectOption<T> {
 export type CompareValue<T> = 
 	| T 
 	| T[] 
-	| { operator: Exclude<CompareOperator, 'IN'>; value: T }
+	| { operator: Exclude<CompareOperator, 'IN' | 'LIKE'>; value: T }
+	| { operator: 'LIKE'; value: T | undefined; pattern?: LikePattern }
 	| { operator: 'IN'; value: T[] };
 
 // 비교 쿼리 타입

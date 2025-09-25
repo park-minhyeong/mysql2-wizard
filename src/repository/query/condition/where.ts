@@ -7,7 +7,7 @@ const processCondition = <T>(
 	key: string,
 	value: CompareValue<T[keyof T]>,
 	values: unknown[]
-): string => {
+): string | null => {
 	const snakeKey = convertToSnakeString(key);
 	
 	// 배열인 경우 - IN 절 처리
@@ -24,6 +24,32 @@ const processCondition = <T>(
 			values.push(...value.value);
 			const placeholders = value.value.map(() => '?').join(', ');
 			return `${mysql2.format('??', [snakeKey])} IN (${placeholders})`;
+		}
+		// LIKE 연산자인 경우 패턴 처리
+		if (value.operator === 'LIKE') {
+			// value가 undefined, null, 빈 문자열인 경우 조건 제외
+			if (value.value === undefined || value.value === null || value.value === '') {
+				return null; // 조건을 제외하기 위해 null 반환
+			}
+			
+			let likeValue: string = String(value.value);
+			const pattern = value.pattern || 'contains'; // 기본값: contains (%_%)
+			switch (pattern) {
+				case 'starts':
+					likeValue = `${likeValue}%`; // _%
+					break;
+				case 'ends':
+					likeValue = `%${likeValue}`; // %_
+					break;
+				case 'contains':
+					likeValue = `%${likeValue}%`; // %_%
+					break;
+				case 'exact':
+					// exact는 % 없이 그대로 사용
+					break;
+			}
+			values.push(likeValue);
+			return `${mysql2.format('??', [snakeKey])} LIKE ?`;
 		}
 		// 일반 operator인 경우
 		values.push(value.value);
@@ -45,7 +71,7 @@ const where = <T>(
 	const conditions = entries.map(([key, value]) => {
 		const val = value as CompareValue<T[keyof T]>;
 		return processCondition(key, val, values);
-	}).join(' AND ');
+	}).filter(condition => condition !== null).join(' AND ');
 
 	// OR 조건 처리
 	let orConditionsString = '';
@@ -59,7 +85,7 @@ const where = <T>(
 				const orConditionsPart = orEntries.map(([key, value]) => {
 					const val = value as CompareValue<T[keyof T]>;
 					return processCondition(key, val, orValues);
-				}).join(' AND ');
+				}).filter(condition => condition !== null).join(' AND ');
 				
 				if (orConditionsPart.trim()) {
 					orParts.push(`(${orConditionsPart})`);
@@ -77,8 +103,10 @@ const where = <T>(
 	let finalConditions = conditions;
 	if (orConditionsString) {
 		if (finalConditions.trim()) {
+			// 메인 조건이 있으면: (메인조건들) AND (OR조건들)
 			finalConditions = `(${finalConditions}) AND (${orConditionsString})`;
 		} else {
+			// 메인 조건이 없으면: OR조건들만
 			finalConditions = orConditionsString;
 		}
 	}
