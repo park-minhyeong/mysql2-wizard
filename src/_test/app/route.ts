@@ -3,6 +3,16 @@ import novelService from "../service/test";
 
 const defaultRouter = express.Router();
 
+defaultRouter.get("/calculate", async (req, res) => {
+  try {
+    const result = await novelService.calculate();
+    return res.json(result);
+  } catch (error) {
+    console.log(error);
+    return res.status(500).json({ error });
+  }
+}); 
+
 defaultRouter.get("/", async (req, res) => {
   try {
     const novels = await novelService.read();

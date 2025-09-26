@@ -30,6 +30,12 @@ const pack = repository<Test, TestAutoSetKeys>({
   // }
 });
 
+async function calculate() {
+  const result = await pack.select()
+  .calculate([{ fn: "SUM", alias: "sum", column: "id" }]);
+  return result;
+}
+
 async function read(): Promise<Test[]>;
 async function read(id: number): Promise<Test | undefined>;
 async function read(id?: number): Promise<Test[] | Test | undefined> {
@@ -118,7 +124,8 @@ const novelService = {
   update,
   delete: delete_,
   testUndefinedWhere,
-  testBulkInsert,
+  testBulkInsert, 
+  calculate,
 };
 
 export default novelService;
