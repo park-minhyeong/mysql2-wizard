@@ -1,5 +1,5 @@
 import { ResultSetHeader } from 'mysql2/promise';
-import { CompareQuery, QueryOption, SelectOption, JoinType, Relations } from './Query';
+import { CompareQuery, QueryOption, SelectOption, JoinType, Relations, AggregateOption, ExtractAliases } from './Query';
 import { ExtendedResultSetHeader } from '../repository/query/insert';
 
 export interface RepositoryConfig<T> {
@@ -19,6 +19,7 @@ export interface ISelectQueryBuilder<T> extends PromiseLike<T[]> {
 	with(relationName: string): ISelectQueryBuilder<T>;
 	or(condition: CompareQuery<T> | CompareQuery<T>[] | undefined): ISelectQueryBuilder<T>;
 	orAny(condition: CompareQuery<T> | CompareQuery<T>[] | undefined): ISelectQueryBuilder<T>;
+	aggregate<A extends readonly AggregateOption<T>[]>(aggregates: A): ISelectQueryBuilder<ExtractAliases<A>>;
 	execute(): Promise<T[]>;
 }
 
@@ -29,6 +30,7 @@ export interface ISelectOneQueryBuilder<T> extends PromiseLike<T | undefined> {
 	with(relationName: string): ISelectOneQueryBuilder<T>;
 	or(condition: CompareQuery<T>| CompareQuery<T>[]): ISelectOneQueryBuilder<T>;
 	orAny(condition: CompareQuery<T> | CompareQuery<T>[]): ISelectOneQueryBuilder<T>;
+	aggregate<A extends readonly AggregateOption<T>[]>(aggregates: A): ISelectOneQueryBuilder<ExtractAliases<A>>;
 	execute(): Promise<T | undefined>;
 }
 

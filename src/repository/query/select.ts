@@ -1,7 +1,7 @@
 import { RowDataPacket } from 'mysql2/promise';
 import { handler } from '../handler';
 import mysql2 from 'mysql2/promise';
-import { CompareQuery, QueryOption, SelectOption, OrderBy, JoinType, JoinClause, Relation } from '../../interface/Query';
+import { CompareQuery, QueryOption, SelectOption, OrderBy, JoinType, JoinClause, Relation, AggregateOption, ExtractAliases } from '../../interface/Query';
 import { ISelectQueryBuilder, ISelectOneQueryBuilder } from '../../interface/Repository';
 import where from './condition/where';
 import orderBy from './option/orderBy';
@@ -9,6 +9,52 @@ import limit from './option/limit';
 import buildJoinClause, { buildRelationJoins } from './relation/join';
 import buildSelectClause from './select.support';
 import { convertToSnakeString, toObject } from '../../utils';
+
+// 집계 함수 처리 헬퍼 함수
+const buildAggregateClause = <T>(
+	aggregates: AggregateOption<T>[],
+	option: QueryOption<T>
+): string => {
+	return aggregates.map(agg => {
+		const [config, condition] = agg;
+		const { function: func = 'SUM', alias } = config;
+		let clause = `${func}(`;
+		
+		if (condition && Object.keys(condition).length > 0) {
+			const conditions = Object.entries(condition).map(([key, value]) => {
+				const snakeKey = convertToSnakeString(key);
+				if (Array.isArray(value)) {
+					const placeholders = value.map(() => '?').join(', ');
+					return `${mysql2.format('??', [snakeKey])} IN (${placeholders})`;
+				} else if (typeof value === 'object' && value !== null && 'operator' in value && 'value' in value) {
+					return `${mysql2.format('??', [snakeKey])} ${value.operator} ?`;
+				} else {
+					return `${mysql2.format('??', [snakeKey])} = ?`;
+				}
+			}).join(' AND ');
+			
+			clause += `CASE WHEN ${conditions} THEN 1 ELSE 0 END`;
+		} else if (func === 'COUNT') {
+			clause += '*';
+		} else {
+			// COUNT가 아닌 다른 함수에서 조건이 없는 경우 에러
+			throw new Error(`Function ${func} requires a condition`);
+		}
+		
+		clause += ')';
+		
+		// NULL 처리를 위한 COALESCE 추가 (COUNT 제외)
+		if (func !== 'COUNT') {
+			clause = `COALESCE(${clause}, 0)`;
+		}
+		
+		if (alias) {
+			clause += ` AS ${mysql2.format('??', [alias])}`;
+		}
+		
+		return clause;
+	}).join(', ');
+};
 
 const queryString = <T>({ table }: QueryOption<T>) => ({
 	selectAll: mysql2.format('SELECT * FROM ??', [table]),
@@ -84,6 +130,13 @@ export class SelectQueryBuilder<T> implements ISelectQueryBuilder<T> {
 		}
 		return this;
 	}
+
+	// 집계 함수 메서드 추가
+	aggregate<A extends readonly AggregateOption<T>[]>(aggregates: A): ISelectQueryBuilder<ExtractAliases<A>> {
+		this.selectOptions.aggregates = aggregates as unknown as AggregateOption<T>[];
+		return this as any;
+	}
+
 	async execute(): Promise<T[]> {
 		return select(this.query, this.option, this.selectOptions);
 	}
@@ -160,6 +213,12 @@ export class SelectOneQueryBuilder<T> implements ISelectOneQueryBuilder<T> {
 		return this;
 	}
 
+	// 집계 함수 메서드 추가
+	aggregate<A extends readonly AggregateOption<T>[]>(aggregates: A): ISelectOneQueryBuilder<ExtractAliases<A>> {
+		this.selectOptions.aggregates = aggregates as unknown as AggregateOption<T>[];
+		return this as any;
+	}
+
 	async execute(): Promise<T | undefined> {
 		return selectOne(this.query, this.option, undefined, this.selectOptions);
 	}
@@ -184,7 +243,10 @@ const select = async <T>(
 	// SELECT 절 구성 - keys 기반 향상된 버전
 	let selectClause: string;
 
-	if (selectOptions?.selectColumns && selectOptions.selectColumns.length > 0) {
+	// 집계 함수가 있는 경우
+	if (selectOptions?.aggregates && selectOptions.aggregates.length > 0) {
+		selectClause = buildAggregateClause(selectOptions.aggregates, option);
+	} else if (selectOptions?.selectColumns && selectOptions.selectColumns.length > 0) {
 		// 명시적 컬럼 지정
 		selectClause = buildSelectClause(selectOptions.selectColumns, option.table);
 	} else {
@@ -408,7 +470,10 @@ const selectOne = async <T>(
 	// SELECT 절 구성 - select 함수와 동일한 로직 적용
 	let selectClause: string;
 
-	if (selectOptions?.selectColumns && selectOptions.selectColumns.length > 0) {
+	// 집계 함수가 있는 경우
+	if (selectOptions?.aggregates && selectOptions.aggregates.length > 0) {
+		selectClause = buildAggregateClause(selectOptions.aggregates, option);
+	} else if (selectOptions?.selectColumns && selectOptions.selectColumns.length > 0) {
 		// 명시적 컬럼 지정
 		selectClause = buildSelectClause(selectOptions.selectColumns, option.table);
 	} else {

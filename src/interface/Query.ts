@@ -13,6 +13,32 @@ export type CompareOperator = '=' | '!=' | '>' | '<' | '>=' | '<=' | 'LIKE' | 'I
 // LIKE 패턴 타입
 export type LikePattern = 'starts' | 'ends' | 'contains' | 'exact';
 
+// 집계 함수 타입
+export type AggregateFunction = 'COUNT' | 'SUM' | 'AVG' | 'MIN' | 'MAX';
+
+// 집계 조건 타입
+export interface AggregateCondition<T> {
+	column: keyof T;
+	condition?: CompareQuery<T>;
+}
+
+// 집계 옵션 타입 (튜플 형태)
+export type AggregateOption<T> = [
+	{ function?: AggregateFunction; alias?: string },
+	CompareQuery<T>?
+];
+
+// 집계 결과 타입 추론을 위한 유틸리티 타입
+export type ExtractAliases<T extends readonly AggregateOption<any>[]> = {
+	[K in T[number] as K extends [infer Config, any]
+		? Config extends { alias: infer Alias }
+			? Alias extends string
+				? Alias
+				: never
+			: never
+		: never]: number;
+};
+
 // ORDER BY 관련 타입
 export type OrderDirection = 'ASC' | 'DESC';
 export interface OrderByClause<T> {
@@ -53,6 +79,7 @@ export interface SelectOption<T> {
 	withRelations?: string[];    // Enhanced Relations용 (새로 추가)
 	orConditions?: CompareQuery<T>[];  // OR 조건들 (새로 추가)
 	orAnyConditions?: CompareQuery<T>[];  // OR 조건들 (내부도 OR로 연결) (새로 추가)
+	aggregates?: AggregateOption<T>[];  // 집계 함수들 (새로 추가)
 }
 
 // 비교 값 타입
