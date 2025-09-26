@@ -34,7 +34,7 @@ export type ExtractAliases<T extends readonly AggregateOption<any>[]> = {
 				: never
 			: never
 		: never]: number;
-};
+} & Record<string, number>;
 
 // ORDER BY 관련 타입
 export type OrderDirection = 'ASC' | 'DESC';
