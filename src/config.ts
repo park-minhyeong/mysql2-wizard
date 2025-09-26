@@ -52,6 +52,7 @@ const readEnv = () => {
   const debug = readBooleanEnv(process.env, 'DB_DEBUG', false);
   const castedBoolean = readBooleanEnv(process.env, 'CASTED_BOOLEAN', false);
   const enableMariaDbJson = readBooleanEnv(process.env, 'ENABLE_MARIADB_JSON', false);
+  const dbType = readStringEnv(process.env, 'DB_TYPE', 'mysql').toLowerCase();
 
   return {
     host,
@@ -64,6 +65,7 @@ const readEnv = () => {
     waitForConnections,
     multipleStatements,
     debug,
+    dbType,
     typeCast: function (field: any, next: any) {
       if (field.type === "TINY" && field.length === 1 && castedBoolean) {
         return field.string() === "1"; // 1 = true, 0 = false
@@ -90,6 +92,7 @@ const readEnv = () => {
 
 const poolOption = readEnv();
 export const pool = mysql2.createPool(poolOption);
+export const dbType = poolOption.dbType;
 
 type HandlerOption = {
   throwError?: boolean;
