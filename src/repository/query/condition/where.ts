@@ -64,7 +64,8 @@ const processCondition = <T>(
 const where = <T>(
 	query: CompareQuery<T>,
 	option: QueryOption<T>,
-	orConditions?: CompareQuery<T>[]
+	orConditions?: CompareQuery<T>[],
+	orAnyConditions?: CompareQuery<T>[]
 ): { conditions: string; values: unknown[] } => {
 	const entries = Object.entries(query).filter(([, value]) => value !== undefined);
 	const values: unknown[] = [];
@@ -73,7 +74,7 @@ const where = <T>(
 		return processCondition(key, val, values);
 	}).filter(condition => condition !== null).join(' AND ');
 
-	// OR 조건 처리
+	// OR 조건 처리 (내부 AND)
 	let orConditionsString = '';
 	if (orConditions && orConditions.length > 0) {
 		const orParts: string[] = [];
@@ -99,15 +100,44 @@ const where = <T>(
 		}
 	}
 
-	// 메인 조건과 OR 조건 결합
+	// OR ANY 조건 처리 (내부 OR)
+	let orAnyConditionsString = '';
+	if (orAnyConditions && orAnyConditions.length > 0) {
+		const orAnyParts: string[] = [];
+		
+		for (const orAnyQuery of orAnyConditions) {
+			const orAnyEntries = Object.entries(orAnyQuery).filter(([, value]) => value !== undefined);
+			if (orAnyEntries.length > 0) {
+				const orAnyValues: unknown[] = [];
+				const orAnyConditionsPart = orAnyEntries.map(([key, value]) => {
+					const val = value as CompareValue<T[keyof T]>;
+					return processCondition(key, val, orAnyValues);
+				}).filter(condition => condition !== null).join(' OR ');
+				
+				if (orAnyConditionsPart.trim()) {
+					orAnyParts.push(`(${orAnyConditionsPart})`);
+					values.push(...orAnyValues);
+				}
+			}
+		}
+		
+		if (orAnyParts.length > 0) {
+			orAnyConditionsString = orAnyParts.join(' OR ');
+		}
+	}
+
+	// 메인 조건과 OR 조건들 결합
 	let finalConditions = conditions;
-	if (orConditionsString) {
+	const allOrConditions = [orConditionsString, orAnyConditionsString].filter(Boolean);
+	
+	if (allOrConditions.length > 0) {
+		const combinedOrConditions = allOrConditions.join(' OR ');
 		if (finalConditions.trim()) {
 			// 메인 조건이 있으면: (메인조건들) AND (OR조건들)
-			finalConditions = `(${finalConditions}) AND (${orConditionsString})`;
+			finalConditions = `(${finalConditions}) AND (${combinedOrConditions})`;
 		} else {
 			// 메인 조건이 없으면: OR조건들만
-			finalConditions = orConditionsString;
+			finalConditions = combinedOrConditions;
 		}
 	}
 

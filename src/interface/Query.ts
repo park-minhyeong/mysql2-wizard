@@ -52,6 +52,7 @@ export interface SelectOption<T> {
 	selectColumns?: string[];    // 새로 추가
 	withRelations?: string[];    // Enhanced Relations용 (새로 추가)
 	orConditions?: CompareQuery<T>[];  // OR 조건들 (새로 추가)
+	orAnyConditions?: CompareQuery<T>[];  // OR 조건들 (내부도 OR로 연결) (새로 추가)
 }
 
 // 비교 값 타입
