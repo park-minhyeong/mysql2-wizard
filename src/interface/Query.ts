@@ -16,16 +16,19 @@ export type LikePattern = 'starts' | 'ends' | 'contains' | 'exact';
 // 집계 함수 타입
 export type AggregateFunction = 'COUNT' | 'SUM' | 'AVG' | 'MIN' | 'MAX';
 
+// 집계 조건 타입
 export interface AggregateCondition<T> {
 	column: keyof T;
 	condition?: CompareQuery<T>;
 }
 
+// 집계 옵션 타입 (튜플 형태)
 export type AggregateOption<T> = [
 	{ function?: AggregateFunction; alias?: string },
 	CompareQuery<T>?
 ];
 
+// 집계 결과 타입 추론을 위한 유틸리티 타입
 export type ExtractAliases<T extends readonly AggregateOption<any>[]> = {
 	[K in T[number] as K extends [infer Config, any]
 		? Config extends { alias: infer Alias }
