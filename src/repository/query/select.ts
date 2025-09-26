@@ -45,29 +45,34 @@ export class SelectQueryBuilder<T> implements ISelectQueryBuilder<T> {
 		this.selectOptions.joins = this.joinClauses;
 		return this;
 	}
+
 	select(columns: string[]): ISelectQueryBuilder<T> {
 		this.selectColumns = columns;
 		this.selectOptions.selectColumns = this.selectColumns;
 		return this;
 	}
+
 	with(relationName: string): ISelectQueryBuilder<T> {
 		this.withRelations.push(relationName);
 		this.selectOptions.withRelations = this.withRelations;
 		return this;
 	}
 
-	or(condition: CompareQuery<T> | CompareQuery<T>[]): ISelectQueryBuilder<T> {
-		if (!this.selectOptions.orConditions) {
-			this.selectOptions.orConditions = [];
-		}
-		if (Array.isArray(condition)) {
-			this.selectOptions.orConditions.push(...condition);
-		} else {
-			this.selectOptions.orConditions.push(condition);
+	or(condition: CompareQuery<T> | CompareQuery<T>[] | undefined): ISelectQueryBuilder<T> {
+		if (condition !== undefined) {
+			if (!this.selectOptions.orConditions) {
+				this.selectOptions.orConditions = [];
+			}
+			if (Array.isArray(condition)) {
+				this.selectOptions.orConditions.push(...condition);
+			} else {
+				this.selectOptions.orConditions.push(condition);
+			}
 		}
 		return this;
 	}
 	orAny(condition: CompareQuery<T> | CompareQuery<T>[]): ISelectQueryBuilder<T> {
+		if (condition !== undefined) {
 		if (!this.selectOptions.orAnyConditions) {
 			this.selectOptions.orAnyConditions = [];
 		}
@@ -76,9 +81,9 @@ export class SelectQueryBuilder<T> implements ISelectQueryBuilder<T> {
 		} else {
 			this.selectOptions.orAnyConditions.push(condition);
 		}
+		}
 		return this;
 	}
-
 	async execute(): Promise<T[]> {
 		return select(this.query, this.option, this.selectOptions);
 	}
@@ -128,14 +133,16 @@ export class SelectOneQueryBuilder<T> implements ISelectOneQueryBuilder<T> {
 	}
 
 	// OR 조건 메서드 추가 (새로운 기능)
-	or(condition: CompareQuery<T> | CompareQuery<T>[]): ISelectOneQueryBuilder<T> {
-		if (!this.selectOptions.orConditions) {
-			this.selectOptions.orConditions = [];
-		}
-		if (Array.isArray(condition)) {
-			this.selectOptions.orConditions.push(...condition);
-		} else {
-			this.selectOptions.orConditions.push(condition);
+	or(condition: CompareQuery<T> | CompareQuery<T>[] | undefined): ISelectOneQueryBuilder<T> {
+		if (condition !== undefined) {
+			if (!this.selectOptions.orConditions) {
+				this.selectOptions.orConditions = [];
+			}
+			if (Array.isArray(condition)) {
+				this.selectOptions.orConditions.push(...condition);
+			} else {
+				this.selectOptions.orConditions.push(condition);
+			}
 		}
 		return this;
 	}

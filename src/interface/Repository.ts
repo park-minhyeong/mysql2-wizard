@@ -17,8 +17,8 @@ export interface ISelectQueryBuilder<T> extends PromiseLike<T[]> {
 	join(table: string, leftColumn: string, rightColumn: string, type?: JoinType): ISelectQueryBuilder<T>;
 	select(columns: string[]): ISelectQueryBuilder<T>;
 	with(relationName: string): ISelectQueryBuilder<T>;
-	or(condition: CompareQuery<T> | CompareQuery<T>[]): ISelectQueryBuilder<T>;
-	orAny(condition: CompareQuery<T> | CompareQuery<T>[]): ISelectQueryBuilder<T>;
+	or(condition: CompareQuery<T> | CompareQuery<T>[] | undefined): ISelectQueryBuilder<T>;
+	orAny(condition: CompareQuery<T> | CompareQuery<T>[] | undefined): ISelectQueryBuilder<T>;
 	execute(): Promise<T[]>;
 }
 
