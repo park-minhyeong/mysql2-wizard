@@ -1,6 +1,7 @@
 import mysql2 from 'mysql2/promise';
 import { CompareQuery, QueryOption } from '../../../interface/Query';
 import { dbType } from '../../../config';
+import { toSnakeString } from '../../../utils';
 import where from '../condition/where';
 
 export interface SumOptions<T> {
@@ -30,15 +31,15 @@ export const buildSumQuery = <T>(
 			sumQuery = `SUM(${caseExpression}) AS ${mysql2.format('??', [alias])}`;
 			values = [...whenValues, then || 1, elseValue || 0];
 		} else {
-			sumQuery = `SUM(${mysql2.format('??', [column])}) AS ${mysql2.format('??', [alias])}`;
+			sumQuery = `SUM(${mysql2.format('??', [toSnakeString(column)])}) AS ${mysql2.format('??', [alias])}`;
 		}
 	} else {
 		// 조건이 없는 경우
 		if (dbType === 'mariadb') {
 			// MariaDB는 NULL 값 처리에 더 엄격할 수 있음
-			sumQuery = `SUM(COALESCE(${mysql2.format('??', [column])}, 0)) AS ${mysql2.format('??', [alias])}`;
+			sumQuery = `SUM(COALESCE(${mysql2.format('??', [toSnakeString(column)])}, 0)) AS ${mysql2.format('??', [alias])}`;
 		} else {
-			sumQuery = `SUM(${mysql2.format('??', [column])}) AS ${mysql2.format('??', [alias])}`;
+			sumQuery = `SUM(${mysql2.format('??', [toSnakeString(column)])}) AS ${mysql2.format('??', [alias])}`;
 		}
 	}
 	return { query: sumQuery, values };

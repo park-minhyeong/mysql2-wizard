@@ -1,6 +1,7 @@
 import mysql2 from 'mysql2/promise';
 import { CompareQuery, QueryOption } from '../../../interface/Query';
 import { dbType } from '../../../config';
+import { toSnakeString } from '../../../utils';
 import where from '../condition/where';
 
 export interface AvgOptions<T> {
@@ -26,13 +27,13 @@ export const buildAvgQuery = <T>(
 			avgQuery = `AVG(${caseExpression}) AS ${mysql2.format('??', [alias])}`;
 			values = [...whenValues, then || 1, elseValue || 0];
 		} else {
-			avgQuery = `AVG(${mysql2.format('??', [column])}) AS ${mysql2.format('??', [alias])}`;
+			avgQuery = `AVG(${mysql2.format('??', [toSnakeString(column)])}) AS ${mysql2.format('??', [alias])}`;
 		}
 	} else {
 		if (dbType === 'mariadb') {
-			avgQuery = `AVG(COALESCE(${mysql2.format('??', [column])}, 0)) AS ${mysql2.format('??', [alias])}`;
+			avgQuery = `AVG(COALESCE(${mysql2.format('??', [toSnakeString(column)])}, 0)) AS ${mysql2.format('??', [alias])}`;
 		} else {
-			avgQuery = `AVG(${mysql2.format('??', [column])}) AS ${mysql2.format('??', [alias])}`;
+			avgQuery = `AVG(${mysql2.format('??', [toSnakeString(column)])}) AS ${mysql2.format('??', [alias])}`;
 		}
 	}
 	return { query: avgQuery, values };

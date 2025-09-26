@@ -1,6 +1,7 @@
 import mysql2 from 'mysql2/promise';
 import { CompareQuery, QueryOption } from '../../../interface/Query';
 import { dbType } from '../../../config';
+import { toSnakeString } from '../../../utils';
 import where from '../condition/where';
 
 export interface CountOptions<T> {
@@ -30,7 +31,7 @@ export const buildCountQuery = <T>(
 			countQuery = `COUNT(${caseExpression}) AS ${mysql2.format('??', [alias])}`;
 			values = [...whenValues];
 		} else {
-			countQuery = `COUNT(${mysql2.format('??', [column])}) AS ${mysql2.format('??', [alias])}`;
+			countQuery = `COUNT(${mysql2.format('??', [toSnakeString(column)])}) AS ${mysql2.format('??', [alias])}`;
 		}
 	} else {
 		// 조건이 없는 경우
@@ -38,7 +39,7 @@ export const buildCountQuery = <T>(
 			// COUNT(*)는 특별한 문법이므로 format하지 않음
 			countQuery = `COUNT(*) AS ${mysql2.format('??', [alias])}`;
 		} else {
-			countQuery = `COUNT(${mysql2.format('??', [column])}) AS ${mysql2.format('??', [alias])}`;
+			countQuery = `COUNT(${mysql2.format('??', [toSnakeString(column)])}) AS ${mysql2.format('??', [alias])}`;
 		}
 	}
 

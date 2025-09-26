@@ -32,7 +32,7 @@ const pack = repository<Test, TestAutoSetKeys>({
 
 async function calculate() {
   const result = await pack.select()
-  .calculate([{ fn: "SUM", alias: "sum", column: "id" }]);
+  .calculate([{ fn: "SUM", alias: "sum", column: "isPublic", case: { when: { isPublic: false }, then: 1, else: 0 } }]);
   return result;
 }
 
