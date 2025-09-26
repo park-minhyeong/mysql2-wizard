@@ -33,26 +33,7 @@ const buildAggregateClause = <T>(
 				}
 			}).join(' AND ');
 			
-			// 함수별로 다른 처리
-			switch (func) {
-				case 'COUNT':
-					clause += `CASE WHEN ${conditions} THEN 1 END`;
-					break;
-				case 'SUM':
-					clause += `CASE WHEN ${conditions} THEN 1 ELSE 0 END`;
-					break;
-				case 'AVG':
-					clause += `CASE WHEN ${conditions} THEN 1 ELSE 0 END`;
-					break;
-				case 'MIN':
-					clause += `CASE WHEN ${conditions} THEN 1 ELSE NULL END`;
-					break;
-				case 'MAX':
-					clause += `CASE WHEN ${conditions} THEN 1 ELSE NULL END`;
-					break;
-				default:
-					throw new Error(`Unsupported function: ${func}`);
-			}
+			clause += `CASE WHEN ${conditions} THEN 1 ELSE 0 END`;
 		} else if (func === 'COUNT') {
 			clause += '*';
 		} else {
