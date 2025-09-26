@@ -21,6 +21,48 @@ export interface OrderByClause<T> {
 }
 export type OrderBy<T> = OrderByClause<T>[];
 
+export type CalculateFn = 'SUM' | 'AVG' | 'MIN' | 'MAX' | 'COUNT';
+
+export type CalculateRaw<A extends string, T> = {
+	fn: CalculateFn;
+	alias: A;
+	column?: string;
+};
+
+export interface CalculateCount<A extends string, T> extends CalculateRaw<A, T> {
+	fn: 'COUNT';
+	column?: string;
+	case?: { when?: CompareQuery<T>; };
+}
+export interface CalculateSum<A extends string, T> extends CalculateRaw<A, T> {
+	fn: 'SUM';
+	column: string;
+	case?: { when?: CompareQuery<T>; then?: number; else?: number };
+}
+export interface CalculateAvg<A extends string, T> extends CalculateRaw<A, T> {
+	fn: 'AVG';
+	column: string;
+	case?: { when: CompareQuery<T>; then?: number; else?: number } | undefined;
+}
+export interface CalculateMin<A extends string, T> extends CalculateRaw<A, T> {
+	fn: 'MIN';
+	column: string;
+	case?: { when: CompareQuery<T>; then?: number; else?: number } | undefined;
+}
+export interface CalculateMax<A extends string, T> extends CalculateRaw<A, T> {
+	fn: 'MAX';
+	column: string;
+	case?: { when: CompareQuery<T>; then?: number; else?: number } | undefined;
+}
+
+export type Calculate<A extends string, T> = CalculateSum<A, T> | CalculateAvg<A, T> | CalculateMin<A, T> | CalculateMax<A, T> | CalculateCount<A, T>;
+
+
+export type InferCalculateResult<T extends Calculate<string, T>[]> = {
+	[K in T[number]['alias']]: number;
+};
+
+
 // JOIN 관련 타입 (새로 추가)
 export type JoinType = 'INNER' | 'LEFT' | 'RIGHT' | 'FULL';
 export interface JoinClause {
@@ -52,6 +94,7 @@ export interface SelectOption<T> {
 	selectColumns?: string[];    // 새로 추가
 	withRelations?: string[];    // Enhanced Relations용 (새로 추가)
 	orConditions?: CompareQuery<T>[];  // OR 조건들 (새로 추가)
+	calculates?: [Calculate<string, T>, CompareQuery<T>][];  // calculate 메서드용 (새로 추가)
 }
 
 // 비교 값 타입
