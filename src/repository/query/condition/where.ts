@@ -72,7 +72,6 @@ const where = <T>(
 		const val = value as CompareValue<T[keyof T]>;
 		return processCondition(key, val, values);
 	}).filter(condition => condition !== null).join(' AND ');
-
 	// OR 조건 처리 (내부 AND)
 	let orConditionsString = '';
 	if (orConditions && orConditions.length > 0) {

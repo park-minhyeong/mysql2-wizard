@@ -1,8 +1,9 @@
 import { RowDataPacket } from 'mysql2/promise';
 import { handler } from '../handler';
 import mysql2 from 'mysql2/promise';
-import { CompareQuery, QueryOption, SelectOption, OrderBy, JoinType, JoinClause, Relation } from '../../interface/Query';
+import { CompareQuery, QueryOption, SelectOption, OrderBy, JoinType, JoinClause, Relation, Calculate } from '../../interface/Query';
 import { ISelectQueryBuilder, ISelectOneQueryBuilder } from '../../interface/Repository';
+import calculate from './calculate';
 import where from './condition/where';
 import orderBy from './option/orderBy';
 import limit from './option/limit';
@@ -70,6 +71,9 @@ export class SelectQueryBuilder<T> implements ISelectQueryBuilder<T> {
 			}
 		}
 		return this;
+	}
+	calculate<C extends Record<string, number>>(calculates: Calculate<string & keyof C, T>[]): Promise<C> {
+		return calculate<T, C>(this.query, this.option, calculates);
 	}
 	async execute(): Promise<T[]> {
 		return select(this.query, this.option, this.selectOptions);
