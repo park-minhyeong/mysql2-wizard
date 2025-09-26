@@ -71,19 +71,6 @@ export class SelectQueryBuilder<T> implements ISelectQueryBuilder<T> {
 		}
 		return this;
 	}
-	orAny(condition: CompareQuery<T> | CompareQuery<T>[]): ISelectQueryBuilder<T> {
-		if (condition !== undefined) {
-		if (!this.selectOptions.orAnyConditions) {
-			this.selectOptions.orAnyConditions = [];
-		}
-		if (Array.isArray(condition)) {
-			this.selectOptions.orAnyConditions.push(...condition);
-		} else {
-			this.selectOptions.orAnyConditions.push(condition);
-		}
-		}
-		return this;
-	}
 	async execute(): Promise<T[]> {
 		return select(this.query, this.option, this.selectOptions);
 	}
@@ -131,8 +118,6 @@ export class SelectOneQueryBuilder<T> implements ISelectOneQueryBuilder<T> {
 		this.selectOptions.withRelations = this.withRelations;
 		return this;
 	}
-
-	// OR 조건 메서드 추가 (새로운 기능)
 	or(condition: CompareQuery<T> | CompareQuery<T>[] | undefined): ISelectOneQueryBuilder<T> {
 		if (condition !== undefined) {
 			if (!this.selectOptions.orConditions) {
@@ -146,20 +131,6 @@ export class SelectOneQueryBuilder<T> implements ISelectOneQueryBuilder<T> {
 		}
 		return this;
 	}
-
-	// OR 조건 메서드 추가 (내부도 OR로 연결)
-	orAny(condition: CompareQuery<T> | CompareQuery<T>[]): ISelectOneQueryBuilder<T> {
-		if (!this.selectOptions.orAnyConditions) {
-			this.selectOptions.orAnyConditions = [];
-		}
-		if (Array.isArray(condition)) {
-			this.selectOptions.orAnyConditions.push(...condition);
-		} else {
-			this.selectOptions.orAnyConditions.push(condition);
-		}
-		return this;
-	}
-
 	async execute(): Promise<T | undefined> {
 		return selectOne(this.query, this.option, undefined, this.selectOptions);
 	}
@@ -247,15 +218,14 @@ const select = async <T>(
 
 	// WHERE 절 추가 (JOIN 절 다음에)
 	if (query && Object.keys(query).length > 0) {
-		const { conditions, values: whereValues } = where(query, option, selectOptions?.orConditions, selectOptions?.orAnyConditions);
+		const { conditions, values: whereValues } = where(query, option, selectOptions?.orConditions);
 		if (conditions.trim()) { // 조건이 실제로 있는 경우에만 WHERE 절 추가
 			query_ += ` WHERE ${conditions}`;
 			values = whereValues;
 		}
-	} else if ((selectOptions?.orConditions && selectOptions.orConditions.length > 0) || 
-	           (selectOptions?.orAnyConditions && selectOptions.orAnyConditions.length > 0)) {
+	} else if (selectOptions?.orConditions && selectOptions.orConditions.length > 0) {
 		// 메인 쿼리가 없지만 OR 조건만 있는 경우
-		const { conditions, values: whereValues } = where({} as CompareQuery<T>, option, selectOptions.orConditions, selectOptions.orAnyConditions);
+		const { conditions, values: whereValues } = where({} as CompareQuery<T>, option, selectOptions.orConditions);
 		if (conditions.trim()) {
 			query_ += ` WHERE ${conditions}`;
 			values = whereValues;
@@ -469,7 +439,7 @@ const selectOne = async <T>(
 	query_ += buildJoinClause(allJoins);
 
 	// WHERE 절 추가 (JOIN 절 다음에)
-	const { conditions, values } = where(query, option, selectOptions?.orConditions, selectOptions?.orAnyConditions);
+	const { conditions, values } = where(query, option, selectOptions?.orConditions);
 	if (conditions.trim()) { // 조건이 실제로 있는 경우에만 WHERE 절 추가
 		query_ += ` WHERE ${conditions}`;
 	}

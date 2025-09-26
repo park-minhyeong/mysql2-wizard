@@ -64,8 +64,7 @@ const processCondition = <T>(
 const where = <T>(
 	query: CompareQuery<T>,
 	option: QueryOption<T>,
-	orConditions?: CompareQuery<T>[],
-	orAnyConditions?: CompareQuery<T>[]
+	orConditions?: CompareQuery<T>[]
 ): { conditions: string; values: unknown[] } => {
 	const entries = Object.entries(query).filter(([, value]) => value !== undefined);
 	const values: unknown[] = [];
@@ -99,36 +98,10 @@ const where = <T>(
 			orConditionsString = orParts.join(' OR ');
 		}
 	}
-
-	// OR ANY 조건 처리 (내부 OR)
-	let orAnyConditionsString = '';
-	if (orAnyConditions && orAnyConditions.length > 0) {
-		const orAnyParts: string[] = [];
-		
-		for (const orAnyQuery of orAnyConditions) {
-			const orAnyEntries = Object.entries(orAnyQuery).filter(([, value]) => value !== undefined);
-			if (orAnyEntries.length > 0) {
-				const orAnyValues: unknown[] = [];
-				const orAnyConditionsPart = orAnyEntries.map(([key, value]) => {
-					const val = value as CompareValue<T[keyof T]>;
-					return processCondition(key, val, orAnyValues);
-				}).filter(condition => condition !== null).join(' OR ');
-				
-				if (orAnyConditionsPart.trim()) {
-					orAnyParts.push(`(${orAnyConditionsPart})`);
-					values.push(...orAnyValues);
-				}
-			}
-		}
-		
-		if (orAnyParts.length > 0) {
-			orAnyConditionsString = orAnyParts.join(' OR ');
-		}
-	}
-
+	
 	// 메인 조건과 OR 조건들 결합
 	let finalConditions = conditions;
-	const allOrConditions = [orConditionsString, orAnyConditionsString].filter(Boolean);
+	const allOrConditions = [orConditionsString].filter(Boolean);
 	
 	if (allOrConditions.length > 0) {
 		const combinedOrConditions = allOrConditions.join(' OR ');
