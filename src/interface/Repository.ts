@@ -1,5 +1,5 @@
 import { ResultSetHeader } from 'mysql2/promise';
-import { CompareQuery, QueryOption, SelectOption, JoinType, Relations } from './Query';
+import { CompareQuery, QueryOption,  JoinType, Relations,  Calculate  } from './Query';
 import { ExtendedResultSetHeader } from '../repository/query/insert';
 
 export interface RepositoryConfig<T> {
@@ -18,6 +18,7 @@ export interface ISelectQueryBuilder<T> extends PromiseLike<T[]> {
 	select(columns: string[]): ISelectQueryBuilder<T>;
 	with(relationName: string): ISelectQueryBuilder<T>;
 	or(condition: CompareQuery<T> | CompareQuery<T>[] | undefined): ISelectQueryBuilder<T>;
+	calculate<C extends Record<string, number>>(calculates: Calculate<string & keyof C, T>[]): Promise<C>;
 	execute(): Promise<T[]>;
 }
 
