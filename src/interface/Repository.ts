@@ -19,7 +19,7 @@ export interface ISelectQueryBuilder<T> extends PromiseLike<T[]> {
 	with(relationName: string): ISelectQueryBuilder<T>;
 	or(condition: CompareQuery<T> | CompareQuery<T>[] | undefined): ISelectQueryBuilder<T>;
 	orAny(condition: CompareQuery<T> | CompareQuery<T>[] | undefined): ISelectQueryBuilder<T>;
-	aggregate<A extends readonly AggregateOption<T>[]>(aggregates: A): ISelectQueryBuilder<ExtractAliases<A>>;
+	aggregate<A extends readonly AggregateOption<T>[]>(aggregates: A): ISelectOneQueryBuilder<ExtractAliases<A>>;
 	execute(): Promise<T[]>;
 }
 
