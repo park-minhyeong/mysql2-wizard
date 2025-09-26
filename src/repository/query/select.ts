@@ -151,7 +151,7 @@ export class SelectQueryBuilder<T> implements ISelectQueryBuilder<T> {
 	}
 
 	// 집계 함수 메서드 추가
-	aggregate<A extends readonly AggregateOption<T>[]>(aggregates: A): ISelectOneQueryBuilder<ExtractAliases<A>> {
+	aggregate<A extends readonly AggregateOption<T>[]>(aggregates: A): ISelectQueryBuilder<ExtractAliases<A>> {
 		this.selectOptions.aggregates = aggregates as unknown as AggregateOption<T>[];
 		return this as any;
 	}

@@ -26,17 +26,15 @@ export type AggregateOption<T> = [
 	CompareQuery<T>?
 ];
 
-// 집계 결과 타입 추론을 위한 유틸리티 타입 (안전한 버전)
-export type ExtractAliases<T extends readonly AggregateOption<any>[]> = 
-	T extends readonly [infer First, ...infer Rest]
-		? First extends [infer Config, any]
-			? Config extends { alias: infer Alias }
-				? Alias extends string
-					? { [K in Alias]: number } & (Rest extends readonly AggregateOption<any>[] ? ExtractAliases<Rest> : {})
-					: Rest extends readonly AggregateOption<any>[] ? ExtractAliases<Rest> : {}
-				: Rest extends readonly AggregateOption<any>[] ? ExtractAliases<Rest> : {}
-			: Rest extends readonly AggregateOption<any>[] ? ExtractAliases<Rest> : {}
-		: {};
+export type ExtractAliases<T extends readonly AggregateOption<any>[]> = {
+	[K in T[number] as K extends [infer Config, any]
+		? Config extends { alias: infer Alias }
+			? Alias extends string
+				? Alias
+				: never
+			: never
+		: never]: number;
+} & Record<string, number>;
 
 // ORDER BY 관련 타입
 export type OrderDirection = 'ASC' | 'DESC';
