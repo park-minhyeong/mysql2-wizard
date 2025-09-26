@@ -26,32 +26,32 @@ export type CalculateFn = 'SUM' | 'AVG' | 'MIN' | 'MAX' | 'COUNT';
 export type CalculateRaw<A extends string, T> = {
 	fn: CalculateFn;
 	alias: A;
-	column?: string;
+	column?: keyof T;
 };
 
 export interface CalculateCount<A extends string, T> extends CalculateRaw<A, T> {
 	fn: 'COUNT';
-	column?: string;
+	column?: keyof T;
 	case?: { when?: CompareQuery<T>; };
 }
 export interface CalculateSum<A extends string, T> extends CalculateRaw<A, T> {
 	fn: 'SUM';
-	column: string;
+	column: keyof T;
 	case?: { when?: CompareQuery<T>; then?: number; else?: number };
 }
 export interface CalculateAvg<A extends string, T> extends CalculateRaw<A, T> {
 	fn: 'AVG';
-	column: string;
+	column: keyof T;
 	case?: { when: CompareQuery<T>; then?: number; else?: number } | undefined;
 }
 export interface CalculateMin<A extends string, T> extends CalculateRaw<A, T> {
 	fn: 'MIN';
-	column: string;
+	column: keyof T;
 	case?: { when: CompareQuery<T>; then?: number; else?: number } | undefined;
 }
 export interface CalculateMax<A extends string, T> extends CalculateRaw<A, T> {
 	fn: 'MAX';
-	column: string;
+	column: keyof T;
 	case?: { when: CompareQuery<T>; then?: number; else?: number } | undefined;
 }
 
