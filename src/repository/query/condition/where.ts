@@ -1,6 +1,7 @@
 import { CompareQuery, CompareValue, QueryOption } from "../../../interface";
 import mysql2 from 'mysql2/promise';
 import { convertToSnakeString } from "../../../utils";
+import { dbType } from "../../../config";
 
 // 조건 처리 헬퍼 함수 (중복 제거)
 const processCondition = <T>(
@@ -19,6 +20,18 @@ const processCondition = <T>(
 	
 	// {operator, value} 객체인 경우
 	if (typeof value === 'object' && value !== null && 'operator' in value && 'value' in value) {
+		// null 값은 연산자에 따라 IS NULL/IS NOT NULL 처리 (mysql/mariadb 동일)
+		if (value.value === null) {
+			const op = String(value.operator).toUpperCase();
+			if (op === '=' || op === '==') {
+				return `${mysql2.format('??', [snakeKey])} IS NULL`;
+			}
+			if (op === '!=' || op === '<>') {
+				return `${mysql2.format('??', [snakeKey])} IS NOT NULL`;
+			}
+			// 기타 비교 연산자(>, <, >=, <= 등)와 null은 의미 없으므로 제외
+			return null;
+		}
 		// operator가 IN이고 value가 배열인 경우
 		if (value.operator === 'IN' && Array.isArray(value.value)) {
 			values.push(...value.value);
@@ -32,6 +45,38 @@ const processCondition = <T>(
 				return null; // 조건을 제외하기 위해 null 반환
 			}
 			
+			// JSON 컬럼 지원: value가 객체면 각 키를 JSON 경로로 LIKE 처리 (OR 묶음)
+			if (typeof value.value === 'object' && value.value !== null) {
+				const jsonEntries = Object.entries(value.value as Record<string, unknown>).filter(([, v]) => v !== undefined);
+				if (jsonEntries.length === 0) {
+					return null;
+				}
+				const pattern = value.pattern || 'contains';
+				const parts: string[] = [];
+				for (const [jsonKey, raw] of jsonEntries) {
+					let likeValue: string = String(raw as unknown as string);
+					switch (pattern) {
+						case 'starts':
+							likeValue = `${likeValue}%`;
+							break;
+						case 'ends':
+							likeValue = `%${likeValue}`;
+							break;
+						case 'contains':
+							likeValue = `%${likeValue}%`;
+							break;
+						case 'exact':
+							break;
+					}
+					const jsonPath = `$.${jsonKey}`;
+					const jsonExpr = `JSON_UNQUOTE(JSON_EXTRACT(${mysql2.format('??', [snakeKey])}, ?))`;
+					parts.push(`CAST(${jsonExpr} AS CHAR) LIKE ?`);
+					values.push(jsonPath, likeValue);
+				}
+				return parts.length > 1 ? `(${parts.join(' OR ')})` : parts[0];
+			}
+			
+			// 일반 문자열 LIKE
 			let likeValue: string = String(value.value);
 			const pattern = value.pattern || 'contains'; // 기본값: contains (%_%)
 			switch (pattern) {
@@ -57,6 +102,9 @@ const processCondition = <T>(
 	}
 	
 	// 기본적인 등호 비교
+	if (value === null) {
+		return `${mysql2.format('??', [snakeKey])} IS NULL`;
+	}
 	values.push(value);
 	return `${mysql2.format('??', [snakeKey])} = ?`;
 };

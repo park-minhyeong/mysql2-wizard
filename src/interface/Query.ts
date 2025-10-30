@@ -98,12 +98,16 @@ export interface SelectOption<T> {
 }
 
 // 비교 값 타입
+// LIKE 전용: JSON 경로 검색을 위해 객체 형태를 허용
+type JsonLikePrimitive = string | number | boolean | null | undefined;
+type JsonLikeObject = Record<string, JsonLikePrimitive>;
+
 export type CompareValue<T> = 
-	| T 
-	| T[] 
-	| { operator: Exclude<CompareOperator, 'IN' | 'LIKE'>; value: T }
-	| { operator: 'LIKE'; value: T | undefined; pattern?: LikePattern }
-	| { operator: 'IN'; value: T[] };
+    | T 
+    | T[] 
+    | { operator: Exclude<CompareOperator, 'IN' | 'LIKE'>; value: T }
+    | { operator: 'LIKE'; value: T | JsonLikePrimitive | JsonLikeObject | undefined; pattern?: LikePattern }
+    | { operator: 'IN'; value: T[] };
 
 // 비교 쿼리 타입
 type CompareQuery<T> = {
