@@ -19,11 +19,6 @@ const processCondition = <T>(
 	
 	// {operator, value} 객체인 경우
 	if (typeof value === 'object' && value !== null && 'operator' in value && 'value' in value) {
-		// value가 undefined, null인 경우 조건 제외
-		if (value.value === undefined || value.value === null) {
-			return null; // 조건을 제외하기 위해 null 반환
-		}
-		
 		// operator가 IN이고 value가 배열인 경우
 		if (value.operator === 'IN' && Array.isArray(value.value)) {
 			values.push(...value.value);
@@ -62,11 +57,6 @@ const processCondition = <T>(
 	}
 	
 	// 기본적인 등호 비교
-	// value가 undefined, null인 경우 조건 제외
-	if (value === undefined || value === null) {
-		return null; // 조건을 제외하기 위해 null 반환
-	}
-	
 	values.push(value);
 	return `${mysql2.format('??', [snakeKey])} = ?`;
 };
@@ -76,7 +66,18 @@ const where = <T>(
 	option: QueryOption<T>,
 	orConditions?: CompareQuery<T>[]
 ): { conditions: string; values: unknown[] } => {
-	const entries = Object.entries(query).filter(([, value]) => value !== undefined);
+	const entries = Object.entries(query).filter(([, value]) => {
+		// undefined 값만 제외 (null은 포함)
+		if (value === undefined) return false;
+		
+		// 객체인 경우 value 속성이 undefined인지 확인
+		if (typeof value === 'object' && value !== null && 'value' in value) {
+			return value.value !== undefined;
+		}
+		
+		return true;
+	});
+	
 	const values: unknown[] = [];
 	const conditions = entries.map(([key, value]) => {
 		const val = value as CompareValue<T[keyof T]>;
@@ -88,7 +89,18 @@ const where = <T>(
 		const orParts: string[] = [];
 		
 		for (const orQuery of orConditions) {
-			const orEntries = Object.entries(orQuery).filter(([, value]) => value !== undefined);
+			const orEntries = Object.entries(orQuery).filter(([, value]) => {
+				// undefined 값만 제외 (null은 포함)
+				if (value === undefined) return false;
+				
+				// 객체인 경우 value 속성이 undefined인지 확인
+				if (typeof value === 'object' && value !== null && 'value' in value) {
+					return value.value !== undefined;
+				}
+				
+				return true;
+			});
+			
 			if (orEntries.length > 0) {
 				const orValues: unknown[] = [];
 				const orConditionsPart = orEntries.map(([key, value]) => {
