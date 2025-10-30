@@ -52,6 +52,7 @@ const readEnv = () => {
   const debug = readBooleanEnv(process.env, 'DB_DEBUG', false);
   const castedBoolean = readBooleanEnv(process.env, 'CASTED_BOOLEAN', false);
   const enableMariaDbJson = readBooleanEnv(process.env, 'ENABLE_MARIADB_JSON', false);
+  const castedDecimalAsNumber = readBooleanEnv(process.env, 'CASTED_DECIMAL_AS_NUMBER', true);
   const dbType = readStringEnv(process.env, 'DB_TYPE', 'mysql').toLowerCase();
 
   return {
@@ -82,6 +83,19 @@ const readEnv = () => {
         } catch (error) {
           // JSON 파싱 실패 시 원본 문자열 반환
           return value;
+        }
+      }
+      
+      // DECIMAL/NEWDECIMAL/FLOAT/DOUBLE을 숫자로 캐스팅 (환경 변수로 활성화)
+      if (castedDecimalAsNumber) {
+        const decimalTypes = ["DECIMAL", "NEWDECIMAL", "FLOAT", "DOUBLE"];
+        if (decimalTypes.includes(field.type)) {
+          const value = field.string();
+          if (value === null || value === undefined) {
+            return null;
+          }
+          const num = Number(value);
+          return Number.isNaN(num) ? value : num;
         }
       }
       
