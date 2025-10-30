@@ -19,6 +19,11 @@ const processCondition = <T>(
 	
 	// {operator, value} 객체인 경우
 	if (typeof value === 'object' && value !== null && 'operator' in value && 'value' in value) {
+		// value가 undefined, null인 경우 조건 제외
+		if (value.value === undefined || value.value === null) {
+			return null; // 조건을 제외하기 위해 null 반환
+		}
+		
 		// operator가 IN이고 value가 배열인 경우
 		if (value.operator === 'IN' && Array.isArray(value.value)) {
 			values.push(...value.value);
@@ -27,8 +32,8 @@ const processCondition = <T>(
 		}
 		// LIKE 연산자인 경우 패턴 처리
 		if (value.operator === 'LIKE') {
-			// value가 undefined, null, 빈 문자열인 경우 조건 제외
-			if (value.value === undefined || value.value === null || value.value === '') {
+			// value가 빈 문자열인 경우 조건 제외
+			if (value.value === '') {
 				return null; // 조건을 제외하기 위해 null 반환
 			}
 			
@@ -57,6 +62,11 @@ const processCondition = <T>(
 	}
 	
 	// 기본적인 등호 비교
+	// value가 undefined, null인 경우 조건 제외
+	if (value === undefined || value === null) {
+		return null; // 조건을 제외하기 위해 null 반환
+	}
+	
 	values.push(value);
 	return `${mysql2.format('??', [snakeKey])} = ?`;
 };
