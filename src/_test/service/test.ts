@@ -14,11 +14,26 @@ async function read(): Promise<any[]> {
   .or({ask: { operator:"LIKE", value: undefined}})
   return questions;
 }
-
+interface Token{
+  id: number;
+  token: string;
+  createdAt: Date;
+  expiredAt: Date;
+}
+const userRepo=repository<Token>({
+  table: "sso.access_token",
+  keys: ["id", "createdAt", "expiredAt", "token"],
+  printQuery: true,
+})
+async function readToken(accessToken: string): Promise<Token[]> {
+  const tokens = await userRepo.select({token:accessToken})
+  return tokens;
+}
 
 
 const novelService = {
-  read
+  read,
+  readToken,
 };
 
 export default novelService;
