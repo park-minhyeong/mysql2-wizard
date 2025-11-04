@@ -24,7 +24,8 @@ const userRepo=repository<Token>({
   table: "sso.access_token",
   keys: ["id", "createdAt", "expiredAt", "token"],
   printQuery: true,
-})
+});
+
 async function readToken(accessToken: string): Promise<Token[]> {
   const tokens = await userRepo.select({token:accessToken})
   return tokens;

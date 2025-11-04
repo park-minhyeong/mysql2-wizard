@@ -67,20 +67,10 @@ const readEnv = () => {
     multipleStatements,
     debug,
     dbType,
+    dateStrings: true, // DATETIME/TIMESTAMP를 문자열로 받아서 타임존 변환 없이 처리
     typeCast: function (field: any, next: any) {
       if (field.type === "TINY" && field.length === 1 && castedBoolean) {
         return field.string() === "1"; // 1 = true, 0 = false
-      }
-      
-      // DATETIME/TIMESTAMP를 UTC로 명시적으로 파싱 (DB에 UTC로 저장된 경우)
-      const dateTypes = ["DATETIME", "TIMESTAMP", "DATE"];
-      if (dateTypes.includes(field.type)) {
-        const value = field.string();
-        if (value === null || value === undefined) {
-          return null;
-        }
-        // 문자열을 UTC로 명시적으로 파싱 (Z 추가)
-        return new Date(value + (value.includes('Z') ? '' : ' UTC'));
       }
       
       // MariaDB JSON 필드 처리 (환경 변수로 활성화)
