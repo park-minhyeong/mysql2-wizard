@@ -73,17 +73,6 @@ const readEnv = () => {
         return field.string() === "1"; // 1 = true, 0 = false
       }
       
-      // DATETIME/TIMESTAMP null 처리 (dateStrings: true로 설정했으므로 문자열로 받아짐)
-      const dateTypes = ["DATETIME", "TIMESTAMP", "DATE"];
-      if (dateTypes.includes(field.type)) {
-        const value = field.string();
-        if (value === null || value === undefined) {
-          return null;
-        }
-        // 값이 있으면 next()로 기본 처리 (문자열 그대로 반환)
-        return next();
-      }
-      
       // MariaDB JSON 필드 처리 (환경 변수로 활성화)
       if (enableMariaDbJson && (field.type === "JSON" || field.type === "BLOB")) {
         const value = field.string();
