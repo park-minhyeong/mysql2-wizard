@@ -76,13 +76,8 @@ const readEnv = () => {
       // DATETIME/TIMESTAMP null 처리 (dateStrings: true로 설정했으므로 문자열로 받아짐)
       const dateTypes = ["DATETIME", "TIMESTAMP", "DATE"];
       if (dateTypes.includes(field.type)) {
-        // null 체크: field.buffer()가 null이면 DB에 null이 저장된 것
-        if (field.buffer() === null) {
-          return null;
-        }
         const value = field.string();
-        // 빈 문자열, undefined, 또는 MySQL zero date 처리
-        if (!value || value === undefined || value === '0000-00-00 00:00:00' || value === '0000-00-00') {
+        if (value === null || value === undefined) {
           return null;
         }
         // 값이 있으면 next()로 기본 처리 (문자열 그대로 반환)
