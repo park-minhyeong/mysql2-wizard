@@ -56,6 +56,9 @@ const readEnv = () => {
   const dbType = readStringEnv(process.env, 'DB_TYPE', 'mysql').toLowerCase();
   const connectionRetryCount = readNumberEnv(process.env, 'DB_CONNECTION_RETRY_COUNT', 3);
   const connectionRetryDelay = readNumberEnv(process.env, 'DB_CONNECTION_RETRY_DELAY', 1000);
+  const enableKeepAlive = readBooleanEnv(process.env, 'DB_ENABLE_KEEP_ALIVE', true);
+  const idleTimeout = readNumberEnv(process.env, 'DB_IDLE_TIMEOUT', 60000); // 60초 (DB wait_timeout보다 짧게)
+  const reconnect = readBooleanEnv(process.env, 'DB_ENABLE_RECONNECT', true);
 
   // mysql2에 전달할 옵션 (커스텀 옵션 제외)
   const mysql2Options = {
@@ -70,6 +73,8 @@ const readEnv = () => {
     multipleStatements,
     debug,
     dateStrings: true, // DATETIME/TIMESTAMP를 문자열로 받아서 타임존 변환 없이 처리
+    enableKeepAlive, // Keep-alive 패킷으로 연결 유지
+    reconnect, // 자동 재연결 활성화
     typeCast: function (field: any, next: any) {
       if (field.type === "TINY" && field.length === 1 && castedBoolean) {
         return field.string() === "1"; // 1 = true, 0 = false
@@ -111,6 +116,7 @@ const readEnv = () => {
     dbType,
     connectionRetryCount,
     connectionRetryDelay,
+    idleTimeout,
   };
 };
 
@@ -186,7 +192,16 @@ export async function getConnection() {
   
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
-      return await pool.getConnection();
+      const connection = await pool.getConnection();
+      // 연결이 살아있는지 확인 (PROTOCOL_CONNECTION_LOST 방지)
+      try {
+        await connection.ping();
+      } catch (pingError) {
+        // ping 실패 시 연결이 죽은 것이므로 release하고 재시도
+        connection.release();
+        throw new Error('Connection is dead, retrying...');
+      }
+      return connection;
     } catch (e) {
       const isTooManyConnections = 
         (e instanceof Error && 
@@ -195,8 +210,15 @@ export async function getConnection() {
           (e as any).code === 'ER_CON_COUNT_ERROR' ||
           (e as any).errno === 1040));
       
-      // 마지막 시도이거나 "Too many connections"가 아닌 경우 상세 로그 출력
-      if (attempt === maxRetries || !isTooManyConnections) {
+      const isConnectionLost = 
+        (e instanceof Error && 
+         ((e as any).code === 'PROTOCOL_CONNECTION_LOST' ||
+          e.message.includes('Connection lost') ||
+          e.message.includes('The server closed the connection') ||
+          e.message.includes('Connection is dead')));
+      
+      // 마지막 시도이거나 "Too many connections"/"Connection lost"가 아닌 경우 상세 로그 출력
+      if (attempt === maxRetries || (!isTooManyConnections && !isConnectionLost)) {
         logger.error(`Failed to get database connection (attempt ${attempt + 1}/${maxRetries + 1})`);
         
         // 연결 설정 정보 출력 (비밀번호 제외)
@@ -249,9 +271,13 @@ export async function getConnection() {
           logger.error(`  Error value: ${JSON.stringify(e)}`);
         }
       } else {
-        // "Too many connections" 에러이고 재시도 가능한 경우
+        // "Too many connections" 또는 "Connection lost" 에러이고 재시도 가능한 경우
         const delay = baseDelay * Math.pow(2, attempt); // 지수 백오프
-        logger.error(`Too many connections detected (attempt ${attempt + 1}/${maxRetries + 1}). Retrying in ${delay}ms...`);
+        if (isTooManyConnections) {
+          logger.error(`Too many connections detected (attempt ${attempt + 1}/${maxRetries + 1}). Retrying in ${delay}ms...`);
+        } else if (isConnectionLost) {
+          logger.error(`Connection lost detected (attempt ${attempt + 1}/${maxRetries + 1}). Retrying in ${delay}ms...`);
+        }
         await new Promise(resolve => setTimeout(resolve, delay));
         continue;
       }

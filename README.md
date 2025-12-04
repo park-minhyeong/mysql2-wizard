@@ -362,13 +362,19 @@ CASTED_BOOLEAN=true
 CASTED_DECIMAL_AS_NUMBER=true
 DB_CONNECTION_RETRY_COUNT=3
 DB_CONNECTION_RETRY_DELAY=1000
+DB_ENABLE_KEEP_ALIVE=true
+DB_IDLE_TIMEOUT=60000
+DB_ENABLE_RECONNECT=true
 ```
 
 설명:
 - `CASTED_BOOLEAN`: TINYINT(1)을 boolean으로 캐스팅합니다.
 - `CASTED_DECIMAL_AS_NUMBER`(기본값: true): DECIMAL/NEWDECIMAL/FLOAT/DOUBLE 결과를 숫자 타입으로 캐스팅합니다. 정밀도가 중요한 금액/빅넘버 컬럼에서는 `false`로 비활성화를 권장합니다.
-- `DB_CONNECTION_RETRY_COUNT`(기본값: 3): "Too many connections" 에러 발생 시 재시도 횟수입니다.
+- `DB_CONNECTION_RETRY_COUNT`(기본값: 3): "Too many connections" 또는 "Connection lost" 에러 발생 시 재시도 횟수입니다.
 - `DB_CONNECTION_RETRY_DELAY`(기본값: 1000): 재시도 간 대기 시간(밀리초)입니다. 지수 백오프 방식으로 증가합니다 (1초, 2초, 4초...).
+- `DB_ENABLE_KEEP_ALIVE`(기본값: true): Keep-alive 패킷으로 DB 연결을 유지합니다. DB의 `wait_timeout`보다 짧게 설정된 경우 연결이 끊기는 것을 방지합니다.
+- `DB_IDLE_TIMEOUT`(기본값: 60000): Pool에서 idle 커넥션을 정리하는 시간(밀리초)입니다. DB의 `wait_timeout`보다 짧게 설정하는 것을 권장합니다 (예: DB가 300초면 60초).
+- `DB_ENABLE_RECONNECT`(기본값: true): 연결이 끊겼을 때 자동으로 재연결을 시도합니다.
 
 ## 🔄 Custom Transaction Handling
 
