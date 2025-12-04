@@ -180,7 +180,7 @@ export async function handler<T>(
   }
 }
 
-async function getConnection() {
+export async function getConnection() {
   const maxRetries = poolConfig.connectionRetryCount;
   const baseDelay = poolConfig.connectionRetryDelay;
   

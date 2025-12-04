@@ -1,7 +1,7 @@
 import mysql2 from "mysql2/promise";
 import { PoolError } from "../interface";
 import { logger } from "../log";
-import { pool } from "../config";
+import { getConnection } from "../config";
 
 export interface HandlerOption {
 	useTransaction?: boolean;
@@ -15,7 +15,11 @@ export async function handler<T>(
 ): Promise<T> {
 	const { useTransaction = false, throwError = true, printSqlError = true } = option;
 	try {
-		const connection = await pool.getConnection();
+		const connection = await getConnection();
+		if (connection === null) {
+			if (throwError) throw new PoolError('Failed to get database connection');
+			return null as T;
+		}
 		try {
 			if (useTransaction) await connection.beginTransaction();
 			const result = await callback(connection);
@@ -36,7 +40,14 @@ export async function handler<T>(
 			connection.release();
 		}
 	} catch (error) {
-		logger.error('Failed to get database connection');
+		// getConnection()에서 이미 상세 로그가 출력되었으므로 여기서는 간단한 메시지만
+		// 하지만 error 객체에 추가 정보가 있다면 출력
+		if (error instanceof Error && error.message !== 'Failed to get database connection') {
+			logger.error(`Connection error: ${error.message}`);
+			if (error.stack) {
+				logger.error(`Stack: ${error.stack}`);
+			}
+		}
 		if (throwError) throw new PoolError('Failed to get database connection');
 		return null as T;
 	}
