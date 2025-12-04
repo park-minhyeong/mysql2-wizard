@@ -54,6 +54,8 @@ const readEnv = () => {
   const enableMariaDbJson = readBooleanEnv(process.env, 'ENABLE_MARIADB_JSON', false);
   const castedDecimalAsNumber = readBooleanEnv(process.env, 'CASTED_DECIMAL_AS_NUMBER', true);
   const dbType = readStringEnv(process.env, 'DB_TYPE', 'mysql').toLowerCase();
+  const connectionRetryCount = readNumberEnv(process.env, 'DB_CONNECTION_RETRY_COUNT', 3);
+  const connectionRetryDelay = readNumberEnv(process.env, 'DB_CONNECTION_RETRY_DELAY', 1000);
 
   return {
     host,
@@ -67,6 +69,8 @@ const readEnv = () => {
     multipleStatements,
     debug,
     dbType,
+    connectionRetryCount,
+    connectionRetryDelay,
     dateStrings: true, // DATETIME/TIMESTAMP를 문자열로 받아서 타임존 변환 없이 처리
     typeCast: function (field: any, next: any) {
       if (field.type === "TINY" && field.length === 1 && castedBoolean) {
@@ -172,61 +176,84 @@ export async function handler<T>(
 }
 
 async function getConnection() {
-  try {
-    return await pool.getConnection();
-  } catch (e) {
-    logger.error("Failed to get database connection");
-    
-    // 연결 설정 정보 출력 (비밀번호 제외)
-    logger.error("Connection configuration:");
-    logger.error(`  Host: ${poolOption.host}`);
-    logger.error(`  Port: ${poolOption.port}`);
-    logger.error(`  User: ${poolOption.user}`);
-    logger.error(`  Database: ${poolOption.database || 'not specified'}`);
-    logger.error(`  Connection Limit: ${poolOption.connectionLimit}`);
-    logger.error(`  Queue Limit: ${poolOption.queueLimit}`);
-    
-    // Pool 상태 정보 (가능한 경우에만)
+  const maxRetries = poolOption.connectionRetryCount;
+  const baseDelay = poolOption.connectionRetryDelay;
+  
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
-      const poolInternal = pool as any;
-      logger.error("Pool status:");
-      if (poolInternal._allConnections) {
-        logger.error(`  Total connections: ${poolInternal._allConnections.length || 0}`);
-      }
-      if (poolInternal._freeConnections) {
-        logger.error(`  Free connections: ${poolInternal._freeConnections.length || 0}`);
-      }
-      if (poolInternal._connectionQueue) {
-        logger.error(`  Queue length: ${poolInternal._connectionQueue.length || 0}`);
-      }
-    } catch (statusError) {
-      logger.error("  Unable to retrieve pool status");
-    }
-    
-    // 에러 상세 정보
-    if (e instanceof Error) {
-      logger.error("Error details:");
-      logger.error(`  Message: ${e.message}`);
-      logger.error(`  Stack: ${e.stack}`);
+      return await pool.getConnection();
+    } catch (e) {
+      const isTooManyConnections = 
+        (e instanceof Error && 
+         (e.message.includes('Too many connections') || 
+          e.message.includes('ER_CON_COUNT_ERROR') ||
+          (e as any).code === 'ER_CON_COUNT_ERROR' ||
+          (e as any).errno === 1040));
       
-      // MySQL 에러인 경우 추가 정보
-      if ('code' in e) {
-        logger.error(`  Code: ${(e as any).code}`);
+      // 마지막 시도이거나 "Too many connections"가 아닌 경우 상세 로그 출력
+      if (attempt === maxRetries || !isTooManyConnections) {
+        logger.error(`Failed to get database connection (attempt ${attempt + 1}/${maxRetries + 1})`);
+        
+        // 연결 설정 정보 출력 (비밀번호 제외)
+        logger.error("Connection configuration:");
+        logger.error(`  Host: ${poolOption.host}`);
+        logger.error(`  Port: ${poolOption.port}`);
+        logger.error(`  User: ${poolOption.user}`);
+        logger.error(`  Database: ${poolOption.database || 'not specified'}`);
+        logger.error(`  Connection Limit: ${poolOption.connectionLimit}`);
+        logger.error(`  Queue Limit: ${poolOption.queueLimit}`);
+        
+        // Pool 상태 정보 (가능한 경우에만)
+        try {
+          const poolInternal = pool as any;
+          logger.error("Pool status:");
+          if (poolInternal._allConnections) {
+            logger.error(`  Total connections: ${poolInternal._allConnections.length || 0}`);
+          }
+          if (poolInternal._freeConnections) {
+            logger.error(`  Free connections: ${poolInternal._freeConnections.length || 0}`);
+          }
+          if (poolInternal._connectionQueue) {
+            logger.error(`  Queue length: ${poolInternal._connectionQueue.length || 0}`);
+          }
+        } catch (statusError) {
+          logger.error("  Unable to retrieve pool status");
+        }
+        
+        // 에러 상세 정보
+        if (e instanceof Error) {
+          logger.error("Error details:");
+          logger.error(`  Message: ${e.message}`);
+          logger.error(`  Stack: ${e.stack}`);
+          
+          // MySQL 에러인 경우 추가 정보
+          if ('code' in e) {
+            logger.error(`  Code: ${(e as any).code}`);
+          }
+          if ('errno' in e) {
+            logger.error(`  Error Number: ${(e as any).errno}`);
+          }
+          if ('sqlState' in e) {
+            logger.error(`  SQL State: ${(e as any).sqlState}`);
+          }
+          if ('sqlMessage' in e) {
+            logger.error(`  SQL Message: ${(e as any).sqlMessage}`);
+          }
+        } else {
+          logger.error(`  Unknown error type: ${typeof e}`);
+          logger.error(`  Error value: ${JSON.stringify(e)}`);
+        }
+      } else {
+        // "Too many connections" 에러이고 재시도 가능한 경우
+        const delay = baseDelay * Math.pow(2, attempt); // 지수 백오프
+        logger.error(`Too many connections detected (attempt ${attempt + 1}/${maxRetries + 1}). Retrying in ${delay}ms...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        continue;
       }
-      if ('errno' in e) {
-        logger.error(`  Error Number: ${(e as any).errno}`);
-      }
-      if ('sqlState' in e) {
-        logger.error(`  SQL State: ${(e as any).sqlState}`);
-      }
-      if ('sqlMessage' in e) {
-        logger.error(`  SQL Message: ${(e as any).sqlMessage}`);
-      }
-    } else {
-      logger.error(`  Unknown error type: ${typeof e}`);
-      logger.error(`  Error value: ${JSON.stringify(e)}`);
+      
+      return null;
     }
-    
-    return null;
   }
+  
+  return null;
 }
