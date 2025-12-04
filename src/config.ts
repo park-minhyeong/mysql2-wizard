@@ -57,7 +57,8 @@ const readEnv = () => {
   const connectionRetryCount = readNumberEnv(process.env, 'DB_CONNECTION_RETRY_COUNT', 3);
   const connectionRetryDelay = readNumberEnv(process.env, 'DB_CONNECTION_RETRY_DELAY', 1000);
 
-  return {
+  // mysql2에 전달할 옵션 (커스텀 옵션 제외)
+  const mysql2Options = {
     host,
     user,
     password,
@@ -68,9 +69,6 @@ const readEnv = () => {
     waitForConnections,
     multipleStatements,
     debug,
-    dbType,
-    connectionRetryCount,
-    connectionRetryDelay,
     dateStrings: true, // DATETIME/TIMESTAMP를 문자열로 받아서 타임존 변환 없이 처리
     typeCast: function (field: any, next: any) {
       if (field.type === "TINY" && field.length === 1 && castedBoolean) {
@@ -107,11 +105,18 @@ const readEnv = () => {
       return next();
     },
   };
+
+  return {
+    mysql2Options,
+    dbType,
+    connectionRetryCount,
+    connectionRetryDelay,
+  };
 };
 
-const poolOption = readEnv();
-export const pool = mysql2.createPool(poolOption);
-export const dbType = poolOption.dbType;
+const poolConfig = readEnv();
+export const pool = mysql2.createPool(poolConfig.mysql2Options);
+export const dbType = poolConfig.dbType;
 
 // Pool 에러 이벤트 리스너 추가 (타입 캐스팅 필요)
 (pool as any).on?.('error', (err: Error) => {
@@ -176,8 +181,8 @@ export async function handler<T>(
 }
 
 async function getConnection() {
-  const maxRetries = poolOption.connectionRetryCount;
-  const baseDelay = poolOption.connectionRetryDelay;
+  const maxRetries = poolConfig.connectionRetryCount;
+  const baseDelay = poolConfig.connectionRetryDelay;
   
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
@@ -196,12 +201,12 @@ async function getConnection() {
         
         // 연결 설정 정보 출력 (비밀번호 제외)
         logger.error("Connection configuration:");
-        logger.error(`  Host: ${poolOption.host}`);
-        logger.error(`  Port: ${poolOption.port}`);
-        logger.error(`  User: ${poolOption.user}`);
-        logger.error(`  Database: ${poolOption.database || 'not specified'}`);
-        logger.error(`  Connection Limit: ${poolOption.connectionLimit}`);
-        logger.error(`  Queue Limit: ${poolOption.queueLimit}`);
+        logger.error(`  Host: ${poolConfig.mysql2Options.host}`);
+        logger.error(`  Port: ${poolConfig.mysql2Options.port}`);
+        logger.error(`  User: ${poolConfig.mysql2Options.user}`);
+        logger.error(`  Database: ${poolConfig.mysql2Options.database || 'not specified'}`);
+        logger.error(`  Connection Limit: ${poolConfig.mysql2Options.connectionLimit}`);
+        logger.error(`  Queue Limit: ${poolConfig.mysql2Options.queueLimit}`);
         
         // Pool 상태 정보 (가능한 경우에만)
         try {
