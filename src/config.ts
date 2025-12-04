@@ -109,6 +109,19 @@ const poolOption = readEnv();
 export const pool = mysql2.createPool(poolOption);
 export const dbType = poolOption.dbType;
 
+// Pool 에러 이벤트 리스너 추가 (타입 캐스팅 필요)
+(pool as any).on?.('error', (err: Error) => {
+  logger.error("Pool error occurred");
+  logger.error(`Error message: ${err.message}`);
+  logger.error(`Error stack: ${err.stack}`);
+  if ('code' in err) {
+    logger.error(`Error code: ${(err as any).code}`);
+  }
+  if ('errno' in err) {
+    logger.error(`Error number: ${(err as any).errno}`);
+  }
+});
+
 type HandlerOption = {
   throwError?: boolean;
   printSqlError?: boolean;
@@ -163,9 +176,57 @@ async function getConnection() {
     return await pool.getConnection();
   } catch (e) {
     logger.error("Failed to get database connection");
-    if (e instanceof Error) {
-      logger.error(e.message);
+    
+    // 연결 설정 정보 출력 (비밀번호 제외)
+    logger.error("Connection configuration:");
+    logger.error(`  Host: ${poolOption.host}`);
+    logger.error(`  Port: ${poolOption.port}`);
+    logger.error(`  User: ${poolOption.user}`);
+    logger.error(`  Database: ${poolOption.database || 'not specified'}`);
+    logger.error(`  Connection Limit: ${poolOption.connectionLimit}`);
+    logger.error(`  Queue Limit: ${poolOption.queueLimit}`);
+    
+    // Pool 상태 정보 (가능한 경우에만)
+    try {
+      const poolInternal = pool as any;
+      logger.error("Pool status:");
+      if (poolInternal._allConnections) {
+        logger.error(`  Total connections: ${poolInternal._allConnections.length || 0}`);
+      }
+      if (poolInternal._freeConnections) {
+        logger.error(`  Free connections: ${poolInternal._freeConnections.length || 0}`);
+      }
+      if (poolInternal._connectionQueue) {
+        logger.error(`  Queue length: ${poolInternal._connectionQueue.length || 0}`);
+      }
+    } catch (statusError) {
+      logger.error("  Unable to retrieve pool status");
     }
+    
+    // 에러 상세 정보
+    if (e instanceof Error) {
+      logger.error("Error details:");
+      logger.error(`  Message: ${e.message}`);
+      logger.error(`  Stack: ${e.stack}`);
+      
+      // MySQL 에러인 경우 추가 정보
+      if ('code' in e) {
+        logger.error(`  Code: ${(e as any).code}`);
+      }
+      if ('errno' in e) {
+        logger.error(`  Error Number: ${(e as any).errno}`);
+      }
+      if ('sqlState' in e) {
+        logger.error(`  SQL State: ${(e as any).sqlState}`);
+      }
+      if ('sqlMessage' in e) {
+        logger.error(`  SQL Message: ${(e as any).sqlMessage}`);
+      }
+    } else {
+      logger.error(`  Unknown error type: ${typeof e}`);
+      logger.error(`  Error value: ${JSON.stringify(e)}`);
+    }
+    
     return null;
   }
 }
