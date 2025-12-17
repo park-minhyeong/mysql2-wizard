@@ -37,6 +37,8 @@ export async function handler<T>(
 			if (throwError) throw error;
 			return null as T;
 		} finally {
+			// 연결 반환 시 마지막 사용 시간 업데이트
+			(connection as any)._lastUse = Date.now();
 			connection.release();
 		}
 	} catch (error) {

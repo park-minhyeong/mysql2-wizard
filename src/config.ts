@@ -124,6 +124,48 @@ const poolConfig = readEnv();
 export const pool = mysql2.createPool(poolConfig.mysql2Options);
 export const dbType = poolConfig.dbType;
 
+// Pool의 오래된 커넥션 자동 정리 (주기적으로 실행)
+const cleanupInterval = 30000; // 30초마다 체크
+setInterval(() => {
+  try {
+    const poolInternal = pool as any;
+    if (poolInternal._allConnections && Array.isArray(poolInternal._allConnections)) {
+      const now = Date.now();
+      let cleanedCount = 0;
+      
+      poolInternal._allConnections.forEach((conn: any) => {
+        // 커넥션이 오래되었거나 죽은 경우 정리
+        if (conn._socket && conn._socket.destroyed) {
+          // 이미 소켓이 닫힌 경우
+          try {
+            conn.destroy();
+            cleanedCount++;
+          } catch (e) {
+            // 무시
+          }
+        } else if (conn._lastUse) {
+          // 마지막 사용 시간이 idleTimeout보다 오래된 경우
+          const idleTime = now - conn._lastUse;
+          if (idleTime > poolConfig.idleTimeout) {
+            try {
+              conn.destroy();
+              cleanedCount++;
+            } catch (e) {
+              // 무시
+            }
+          }
+        }
+      });
+      
+      if (cleanedCount > 0 && poolConfig.mysql2Options.debug) {
+        logger.debug(`Cleaned up ${cleanedCount} idle connections`);
+      }
+    }
+  } catch (error) {
+    // 정리 중 에러 발생 시 무시 (Pool 내부 구조 변경 시 대비)
+  }
+}, cleanupInterval);
+
 // Pool 에러 이벤트 리스너 추가 (타입 캐스팅 필요)
 (pool as any).on?.('error', (err: Error) => {
   logger.error("Pool error occurred");
@@ -182,6 +224,8 @@ export async function handler<T>(
     if (option?.throwError) throw e;
     return null;
   } finally {
+    // 연결 반환 시 마지막 사용 시간 업데이트 (idleTimeout 관리용)
+    (connection as any)._lastUse = Date.now();
     connection.release();
   }
 }
@@ -193,14 +237,23 @@ export async function getConnection() {
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
       const connection = await pool.getConnection();
+      
       // 연결이 살아있는지 확인 (PROTOCOL_CONNECTION_LOST 방지)
       try {
         await connection.ping();
       } catch (pingError) {
-        // ping 실패 시 연결이 죽은 것이므로 release하고 재시도
-        connection.release();
+        // ping 실패 시 연결이 죽은 것이므로 destroy하고 재시도
+        try {
+          connection.destroy();
+        } catch (destroyError) {
+          // 무시
+        }
         throw new Error('Connection is dead, retrying...');
       }
+      
+      // 연결의 마지막 사용 시간 기록 (idleTimeout 관리용)
+      (connection as any)._lastUse = Date.now();
+      
       return connection;
     } catch (e) {
       const isTooManyConnections = 
