@@ -59,6 +59,7 @@ const readEnv = () => {
   const enableKeepAlive = readBooleanEnv(process.env, 'DB_ENABLE_KEEP_ALIVE', true);
   const idleTimeout = readNumberEnv(process.env, 'DB_IDLE_TIMEOUT', 60000); // 60초 (DB wait_timeout보다 짧게)
   const reconnect = readBooleanEnv(process.env, 'DB_ENABLE_RECONNECT', true);
+  const convertDateToUTC = readBooleanEnv(process.env, 'DB_CONVERT_DATE_TO_UTC', true); // POST 요청 시 날짜를 UTC로 변환하여 저장
 
   // mysql2에 전달할 옵션 (커스텀 옵션 제외)
   const mysql2Options = {
@@ -72,7 +73,7 @@ const readEnv = () => {
     waitForConnections,
     multipleStatements,
     debug,
-    dateStrings: true, // DATETIME/TIMESTAMP를 문자열로 받아서 타임존 변환 없이 처리
+    dateStrings: true,
     enableKeepAlive, // Keep-alive 패킷으로 연결 유지
     reconnect, // 자동 재연결 활성화
     typeCast: function (field: any, next: any) {
@@ -117,12 +118,14 @@ const readEnv = () => {
     connectionRetryCount,
     connectionRetryDelay,
     idleTimeout,
+    convertDateToUTC,
   };
 };
 
 const poolConfig = readEnv();
 export const pool = mysql2.createPool(poolConfig.mysql2Options);
 export const dbType = poolConfig.dbType;
+export const convertDateToUTC = poolConfig.convertDateToUTC;
 
 // Pool의 오래된 커넥션 자동 정리 (주기적으로 실행)
 const cleanupInterval = 30000; // 30초마다 체크
