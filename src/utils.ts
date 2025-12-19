@@ -4,6 +4,7 @@ const IS_FIELD_REGEX = /^is_/;
 const JSON_FIELD_REGEX = /(json|ask|data|config|settings|metadata|options|params|attributes|properties)/i; // JSON 필드 식별용 정규식
 const DATE_FIELD_REGEX = /(at|date|time)$/i; // 날짜 필드 식별용 정규식 (createdAt, updatedAt, startedAt 등)
 const DATETIME_REGEX = /^\d{4}-\d{2}-\d{2}(\s\d{2}:\d{2}:\d{2}(\.\d{1,3})?)?$/; // MySQL DATETIME 형식: YYYY-MM-DD 또는 YYYY-MM-DD HH:mm:ss[.SSS]
+const DATE_ONLY_REGEX = /^\d{4}-\d{2}-\d{2}$/; // 날짜만 있는 형식: YYYY-MM-DD
 
 // JSON 문자열인지 확인하는 함수
 const isJsonString = (str: string): boolean => {
@@ -43,16 +44,17 @@ const isJsonString = (str: string): boolean => {
   return false;
 };
 
-// MySQL DATETIME 문자열을 Date 객체로 변환 (타임존 변환 포함)
+// MySQL DATETIME 문자열(UTC)을 Date 객체로 변환 (UTC로 해석 후 로컬 타임존으로 변환)
 const parseDateString = (dateString: string): Date | string => {
 	if (!dateString || typeof dateString !== 'string') return dateString;
 	
 	const trimmed = dateString.trim();
 	
 	// MySQL DATETIME 형식 확인: YYYY-MM-DD 또는 YYYY-MM-DD HH:mm:ss[.SSS]
-	if (DATETIME_REGEX.test(trimmed)) {
-		// Date 객체로 변환 (로컬 타임존으로 파싱)
-		const date = new Date(trimmed);
+	if (DATETIME_REGEX.test(trimmed) || DATE_ONLY_REGEX.test(trimmed)) {
+		// DB에 UTC로 저장되어 있으므로, UTC로 해석하고 로컬 타임존 Date 객체로 변환
+		// "2025-12-19 00:30:00" (UTC) → 로컬 타임존 Date 객체 (한국시간이면 +09:00)
+		const date = new Date(trimmed + 'Z'); // 'Z'를 추가하여 UTC로 명시적으로 해석
 		// 유효한 날짜인지 확인
 		if (!isNaN(date.getTime())) {
 			return date;
@@ -155,8 +157,15 @@ const convertStringDateToUTC = (dateString: string): string => {
 	
 	const trimmed = dateString.trim();
 	
-	// MySQL DATETIME 형식 확인: YYYY-MM-DD 또는 YYYY-MM-DD HH:mm:ss[.SSS]
-	if (DATETIME_REGEX.test(trimmed)) {
+	// 날짜만 있는 경우 (YYYY-MM-DD): 시간을 00:00:00으로 추가
+	if (DATE_ONLY_REGEX.test(trimmed)) {
+		const localDate = new Date(trimmed + ' 00:00:00');
+		if (!isNaN(localDate.getTime())) {
+			return formatDateForMySQLUTC(localDate);
+		}
+	}
+	// MySQL DATETIME 형식 확인: YYYY-MM-DD HH:mm:ss[.SSS]
+	else if (DATETIME_REGEX.test(trimmed)) {
 		// 로컬 타임존으로 파싱
 		const localDate = new Date(trimmed);
 		
