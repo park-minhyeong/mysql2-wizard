@@ -44,7 +44,40 @@ const isJsonString = (str: string): boolean => {
   return false;
 };
 
-// MySQL DATETIME 문자열(UTC)을 Date 객체로 변환 (UTC로 해석 후 로컬 타임존으로 변환)
+// UTC 날짜 문자열을 서버 로컬 타임존 문자열로 변환
+const convertUTCToLocal = (utcString: string): string => {
+	if (!utcString || typeof utcString !== 'string') return utcString;
+	
+	const trimmed = utcString.trim();
+	
+	// MySQL DATETIME 형식 확인: YYYY-MM-DD 또는 YYYY-MM-DD HH:mm:ss[.SSS]
+	if (DATETIME_REGEX.test(trimmed) || DATE_ONLY_REGEX.test(trimmed)) {
+		// UTC로 해석
+		const utcDate = new Date(trimmed + 'Z');
+		
+		// 유효한 날짜인지 확인
+		if (!isNaN(utcDate.getTime())) {
+			// 서버의 로컬 타임존으로 변환
+			const localYear = utcDate.getFullYear();
+			const localMonth = String(utcDate.getMonth() + 1).padStart(2, '0');
+			const localDay = String(utcDate.getDate()).padStart(2, '0');
+			const localHours = String(utcDate.getHours()).padStart(2, '0');
+			const localMinutes = String(utcDate.getMinutes()).padStart(2, '0');
+			const localSeconds = String(utcDate.getSeconds()).padStart(2, '0');
+			
+			// 날짜만 있는 경우 시간 부분 제외
+			if (DATE_ONLY_REGEX.test(trimmed)) {
+				return `${localYear}-${localMonth}-${localDay}`;
+			}
+			
+			return `${localYear}-${localMonth}-${localDay} ${localHours}:${localMinutes}:${localSeconds}`;
+		}
+	}
+	
+	return utcString;
+};
+
+// MySQL DATETIME 문자열(UTC)을 서버 로컬 타임존 문자열로 변환
 const parseDateString = (dateString: string): Date | string => {
 	if (!dateString || typeof dateString !== 'string') return dateString;
 	
@@ -52,13 +85,8 @@ const parseDateString = (dateString: string): Date | string => {
 	
 	// MySQL DATETIME 형식 확인: YYYY-MM-DD 또는 YYYY-MM-DD HH:mm:ss[.SSS]
 	if (DATETIME_REGEX.test(trimmed) || DATE_ONLY_REGEX.test(trimmed)) {
-		// DB에 UTC로 저장되어 있으므로, UTC로 해석하고 로컬 타임존 Date 객체로 변환
-		// "2025-12-19 00:30:00" (UTC) → 로컬 타임존 Date 객체 (한국시간이면 +09:00)
-		const date = new Date(trimmed + 'Z'); // 'Z'를 추가하여 UTC로 명시적으로 해석
-		// 유효한 날짜인지 확인
-		if (!isNaN(date.getTime())) {
-			return date;
-		}
+		// DB에 UTC로 저장되어 있으므로, UTC로 해석하고 서버 로컬 타임존 문자열로 변환
+		return convertUTCToLocal(trimmed);
 	}
 	
 	return dateString;
