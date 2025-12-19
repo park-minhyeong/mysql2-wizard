@@ -2,6 +2,8 @@ import { ToRowOption } from "./interface";
 
 const IS_FIELD_REGEX = /^is_/;
 const JSON_FIELD_REGEX = /(json|ask|data|config|settings|metadata|options|params|attributes|properties)/i; // JSON 필드 식별용 정규식
+const DATE_FIELD_REGEX = /(at|date|time)$/i; // 날짜 필드 식별용 정규식 (createdAt, updatedAt, startedAt 등)
+const DATETIME_REGEX = /^\d{4}-\d{2}-\d{2}(\s\d{2}:\d{2}:\d{2}(\.\d{1,3})?)?$/; // MySQL DATETIME 형식: YYYY-MM-DD 또는 YYYY-MM-DD HH:mm:ss[.SSS]
 
 // JSON 문자열인지 확인하는 함수
 const isJsonString = (str: string): boolean => {
@@ -41,6 +43,25 @@ const isJsonString = (str: string): boolean => {
   return false;
 };
 
+// MySQL DATETIME 문자열을 Date 객체로 변환 (타임존 변환 포함)
+const parseDateString = (dateString: string): Date | string => {
+	if (!dateString || typeof dateString !== 'string') return dateString;
+	
+	const trimmed = dateString.trim();
+	
+	// MySQL DATETIME 형식 확인: YYYY-MM-DD 또는 YYYY-MM-DD HH:mm:ss[.SSS]
+	if (DATETIME_REGEX.test(trimmed)) {
+		// Date 객체로 변환 (로컬 타임존으로 파싱)
+		const date = new Date(trimmed);
+		// 유효한 날짜인지 확인
+		if (!isNaN(date.getTime())) {
+			return date;
+		}
+	}
+	
+	return dateString;
+};
+
 const toObject = <T>(keys: string[], row: Record<string, any>): T => {
 	const snakeKeys = convertToSnakeStrings([...keys]);
 	const result = {} as Record<string, unknown>;
@@ -50,24 +71,55 @@ const toObject = <T>(keys: string[], row: Record<string, any>): T => {
 		
 		if(IS_FIELD_REGEX.test(snakeKey)) {
 			result[key] = toBoolean(value);
-		} else if (typeof value === 'string' && value !== null && isJsonString(value)) {
-			// 모든 문자열 필드에 대해 JSON 파싱 시도
-			try {
-				const trimmed = value.trim();
-				// 이스케이프된 JSON 문자열 처리
-				if (trimmed.startsWith('"') && trimmed.endsWith('"')) {
-					const unescaped = JSON.parse(trimmed);
-					if (typeof unescaped === 'string') {
-						result[key] = JSON.parse(unescaped);
-					} else {
-						result[key] = unescaped;
+		} else if (typeof value === 'string' && value !== null && value !== undefined) {
+			// 날짜 필드인 경우 Date 객체로 변환 (타임존 변환 포함)
+			if (DATE_FIELD_REGEX.test(key) || DATE_FIELD_REGEX.test(snakeKey)) {
+				const parsed = parseDateString(value);
+				if (parsed instanceof Date) {
+					result[key] = parsed;
+				} else if (isJsonString(value)) {
+					// JSON 문자열인 경우 JSON 파싱 시도
+					try {
+						const trimmed = value.trim();
+						if (trimmed.startsWith('"') && trimmed.endsWith('"')) {
+							const unescaped = JSON.parse(trimmed);
+							if (typeof unescaped === 'string') {
+								result[key] = JSON.parse(unescaped);
+							} else {
+								result[key] = unescaped;
+							}
+						} else {
+							result[key] = JSON.parse(value);
+						}
+					} catch (error) {
+						result[key] = value;
 					}
 				} else {
-					// 일반 JSON 파싱
-					result[key] = JSON.parse(value);
+					result[key] = parsed;
 				}
-			} catch (error) {
-				result[key] = value;
+			} else if (isJsonString(value)) {
+				// 모든 문자열 필드에 대해 JSON 파싱 시도
+				try {
+					const trimmed = value.trim();
+					// 이스케이프된 JSON 문자열 처리
+					if (trimmed.startsWith('"') && trimmed.endsWith('"')) {
+						const unescaped = JSON.parse(trimmed);
+						if (typeof unescaped === 'string') {
+							result[key] = JSON.parse(unescaped);
+						} else {
+							result[key] = unescaped;
+						}
+					} else {
+						// 일반 JSON 파싱
+						result[key] = JSON.parse(value);
+					}
+				} catch (error) {
+					result[key] = value;
+				}
+			} else {
+				// 일반 문자열이지만 날짜 형식일 수 있음 (필드 이름으로 감지되지 않은 경우)
+				const parsed = parseDateString(value);
+				result[key] = parsed instanceof Date ? parsed : value;
 			}
 		} else {
 			result[key] = value;
@@ -75,6 +127,17 @@ const toObject = <T>(keys: string[], row: Record<string, any>): T => {
 	});
 	return result as T;
 };
+// Date 객체를 MySQL DATETIME 형식 문자열로 변환
+const formatDateForMySQL = (date: Date): string => {
+	const year = date.getFullYear();
+	const month = String(date.getMonth() + 1).padStart(2, '0');
+	const day = String(date.getDate()).padStart(2, '0');
+	const hours = String(date.getHours()).padStart(2, '0');
+	const minutes = String(date.getMinutes()).padStart(2, '0');
+	const seconds = String(date.getSeconds()).padStart(2, '0');
+	return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+};
+
 const toRow = <T>(keys: readonly string[], obj: T, autoSetKeys: readonly string[],option?: ToRowOption): Record<string, any> => {
 	const isAutoSet = option?.isAutoSet ?? true;
 	const row: Record<string, unknown> = {};
@@ -83,8 +146,12 @@ const toRow = <T>(keys: readonly string[], obj: T, autoSetKeys: readonly string[
 			row[[key][0]] = undefined;
 		} else {
 			const value = obj[key as keyof typeof obj];
-			// JSON 필드 처리: 객체나 배열을 문자열로 변환
-			if (value !== null && value !== undefined && typeof value === 'object') {
+			// Date 객체 처리: MySQL DATETIME 형식 문자열로 변환 (UTC 변환 방지)
+			if (value instanceof Date) {
+				row[[key][0]] = formatDateForMySQL(value);
+			}
+			// JSON 필드 처리: 객체나 배열을 문자열로 변환 (Date 제외)
+			else if (value !== null && value !== undefined && typeof value === 'object') {
 				row[[key][0]] = JSON.stringify(value);
 			} else {
 				row[[key][0]] = value;
