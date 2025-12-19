@@ -73,8 +73,8 @@ const readEnv = () => {
     waitForConnections,
     multipleStatements,
     debug,
-    dateStrings: true,
     enableKeepAlive, // Keep-alive 패킷으로 연결 유지
+    dateStrings: true,
     reconnect, // 자동 재연결 활성화
     typeCast: function (field: any, next: any) {
       if (field.type === "TINY" && field.length === 1 && castedBoolean) {
