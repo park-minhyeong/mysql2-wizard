@@ -127,7 +127,7 @@ const toObject = <T>(keys: string[], row: Record<string, any>): T => {
 	});
 	return result as T;
 };
-// Date 객체를 MySQL DATETIME 형식 문자열로 변환
+// Date 객체를 MySQL DATETIME 형식 문자열로 변환 (로컬 타임존 기준)
 const formatDateForMySQL = (date: Date): string => {
 	const year = date.getFullYear();
 	const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -138,6 +138,38 @@ const formatDateForMySQL = (date: Date): string => {
 	return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
 };
 
+// Date 객체를 MySQL DATETIME 형식 문자열로 변환 (UTC 기준)
+const formatDateForMySQLUTC = (date: Date): string => {
+	const year = date.getUTCFullYear();
+	const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+	const day = String(date.getUTCDate()).padStart(2, '0');
+	const hours = String(date.getUTCHours()).padStart(2, '0');
+	const minutes = String(date.getUTCMinutes()).padStart(2, '0');
+	const seconds = String(date.getUTCSeconds()).padStart(2, '0');
+	return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+};
+
+// 문자열 날짜를 UTC로 변환하여 MySQL DATETIME 형식 문자열로 반환
+const convertStringDateToUTC = (dateString: string): string => {
+	if (!dateString || typeof dateString !== 'string') return dateString;
+	
+	const trimmed = dateString.trim();
+	
+	// MySQL DATETIME 형식 확인: YYYY-MM-DD 또는 YYYY-MM-DD HH:mm:ss[.SSS]
+	if (DATETIME_REGEX.test(trimmed)) {
+		// 로컬 타임존으로 파싱
+		const localDate = new Date(trimmed);
+		
+		// 유효한 날짜인지 확인
+		if (!isNaN(localDate.getTime())) {
+			// UTC로 변환하여 MySQL 형식 문자열로 반환
+			return formatDateForMySQLUTC(localDate);
+		}
+	}
+	
+	return dateString;
+};
+
 const toRow = <T>(keys: readonly string[], obj: T, autoSetKeys: readonly string[],option?: ToRowOption): Record<string, any> => {
 	const isAutoSet = option?.isAutoSet ?? true;
 	const row: Record<string, unknown> = {};
@@ -146,9 +178,18 @@ const toRow = <T>(keys: readonly string[], obj: T, autoSetKeys: readonly string[
 			row[[key][0]] = undefined;
 		} else {
 			const value = obj[key as keyof typeof obj];
-			// Date 객체 처리: MySQL DATETIME 형식 문자열로 변환 (UTC 변환 방지)
+			// Date 객체 처리: MySQL DATETIME 형식 문자열로 변환 (로컬 타임존 기준)
 			if (value instanceof Date) {
 				row[[key][0]] = formatDateForMySQL(value);
+			}
+			// 문자열 날짜 처리: 로컬 타임존으로 해석 후 UTC로 변환하여 저장
+			else if (typeof value === 'string' && value !== null && value !== undefined) {
+				// 날짜 필드인 경우 UTC로 변환
+				if (DATE_FIELD_REGEX.test(key) || DATE_FIELD_REGEX.test(convertToSnakeString(String(key)))) {
+					row[[key][0]] = convertStringDateToUTC(value);
+				} else {
+					row[[key][0]] = value;
+				}
 			}
 			// JSON 필드 처리: 객체나 배열을 문자열로 변환 (Date 제외)
 			else if (value !== null && value !== undefined && typeof value === 'object') {
