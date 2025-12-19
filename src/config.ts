@@ -72,7 +72,7 @@ const readEnv = () => {
     waitForConnections,
     multipleStatements,
     debug,
-    dateStrings: true, // DATETIME/TIMESTAMP를 문자열로 받아서 타임존 변환 없이 처리
+    // dateStrings: true, // DATETIME/TIMESTAMP를 문자열로 받아서 타임존 변환 없이 처리
     enableKeepAlive, // Keep-alive 패킷으로 연결 유지
     reconnect, // 자동 재연결 활성화
     typeCast: function (field: any, next: any) {
