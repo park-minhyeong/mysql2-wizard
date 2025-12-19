@@ -1,40 +1,24 @@
+import { ResultSetHeader } from "mysql2";
 import { repository } from "../../repository";
-
-export const qTypes = ["T", "I", "A", "AT", "AI", "IT", "AIT"] as const;
-export type QType = (typeof qTypes)[number];
+import { Test, testKeys } from "../interface/Test";
 
 
-const pack = repository<any, never>({
-  table: "question",
-  keys: ["id"],
-  printQuery: true,
-});
-async function read(): Promise<any[]> {
-  const questions = await pack.select()
-  .or({ask: { operator:"LIKE", value: undefined}})
-  return questions;
-}
-interface Token{
-  id: number;
-  token: string;
-  createdAt: Date;
-  expiredAt: Date;
-}
-const userRepo=repository<Token>({
-  table: "sso.access_token",
-  keys: ["id", "createdAt", "expiredAt", "token"],
+const repo = repository<Test, never>({
+  table: "test.test",
+  keys: testKeys,
   printQuery: true,
 });
 
-async function readToken(accessToken: string): Promise<Token[]> {
-  const tokens = await userRepo.select({token:accessToken})
-  return tokens;
+async function read(): Promise<Test[]> {
+  return await repo.select();
 }
 
-
-const novelService = {
+async function create(test: Test): Promise<ResultSetHeader> {
+  return await repo.insert([test]);
+}
+const testService = {
   read,
-  readToken,
+  create,
 };
 
-export default novelService;
+export default testService;
