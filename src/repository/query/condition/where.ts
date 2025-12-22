@@ -38,6 +38,31 @@ const processCondition = <T>(
 			const placeholders = value.value.map(() => '?').join(', ');
 			return `${mysql2.format('??', [snakeKey])} IN (${placeholders})`;
 		}
+		// operator가 IN_JSON이고 value가 배열인 경우
+		if (value.operator === 'IN_JSON' && Array.isArray(value.value)) {
+			if (value.value.length === 0) return null; // 빈 배열이면 조건 제외
+			
+			// 모든 요소가 배열이면 각 하위 배열에 대해 JSON_CONTAINS로 OR 조건 구성 (합집합)
+			const isEveryArray = value.value.every(v => Array.isArray(v));
+			if (isEveryArray) {
+				const parts: string[] = [];
+				for (const sub of value.value as any[]) {
+					if (!Array.isArray(sub) || sub.length === 0) continue;
+					const ph = sub.map(() => '?').join(', ');
+					parts.push(`JSON_CONTAINS(${mysql2.format('??', [snakeKey])}, JSON_ARRAY(${ph}))`);
+					values.push(...sub);
+				}
+				if (parts.length === 0) return null;
+				return parts.length > 1 ? `(${parts.join(' OR ')})` : parts[0];
+			}
+			
+			// 일부 또는 전부가 배열이 아닌 경우: 단일 JSON_ARRAY로 JSON_OVERLAPS
+			const hasNestedArray = (value.value as any[]).some(v => Array.isArray(v));
+			const flatValues = hasNestedArray ? (value.value as any[]).flat() : (value.value as any[]);
+			const placeholders = flatValues.map(() => '?').join(', ');
+			values.push(...flatValues);
+			return `JSON_OVERLAPS(${mysql2.format('??', [snakeKey])}, JSON_ARRAY(${placeholders}))`;
+		}
 		// LIKE 연산자인 경우 패턴 처리
 		if (value.operator === 'LIKE') {
 			// value가 빈 문자열인 경우 조건 제외

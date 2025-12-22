@@ -44,6 +44,46 @@ const isJsonString = (str: string): boolean => {
   return false;
 };
 
+// Date 객체를 MySQL DATETIME 형식 문자열로 변환 (UTC 기준)
+const formatDateForMySQLUTC = (date: Date): string => {
+	const year = date.getUTCFullYear();
+	const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+	const day = String(date.getUTCDate()).padStart(2, '0');
+	const hours = String(date.getUTCHours()).padStart(2, '0');
+	const minutes = String(date.getUTCMinutes()).padStart(2, '0');
+	const seconds = String(date.getUTCSeconds()).padStart(2, '0');
+	return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+};
+
+// 문자열 날짜를 UTC로 변환하여 MySQL DATETIME 형식 문자열로 반환
+// 날짜만 있는 경우(YYYY-MM-DD)는 UTC 변환하지 않음 (DATE 타입 필드용)
+const convertStringDateToUTC = (dateString: string): string => {
+	if (!dateString || typeof dateString !== 'string') return dateString;
+	
+	const trimmed = dateString.trim();
+	
+	// 날짜만 있는 경우 (YYYY-MM-DD): UTC 변환하지 않고 그대로 반환
+	// DATE 타입 필드는 날짜만 저장하므로 타임존 변환 불필요
+	if (DATE_ONLY_REGEX.test(trimmed)) {
+		return trimmed;
+	}
+	
+	// MySQL DATETIME/TIMESTAMP 형식 확인: YYYY-MM-DD HH:mm:ss[.SSS]
+	// 시간 정보가 있는 경우만 UTC로 변환
+	if (DATETIME_REGEX.test(trimmed)) {
+		// 로컬 타임존으로 파싱
+		const localDate = new Date(trimmed);
+		
+		// 유효한 날짜인지 확인
+		if (!isNaN(localDate.getTime())) {
+			// UTC로 변환하여 MySQL 형식 문자열로 반환
+			return formatDateForMySQLUTC(localDate);
+		}
+	}
+	
+	return dateString;
+};
+
 // UTC 날짜 문자열을 Date 객체로 변환 (UTC 값 그대로 유지)
 const convertUTCStringToDate = (utcString: string): Date | string => {
 	if (!utcString || typeof utcString !== 'string') return utcString;
@@ -144,8 +184,24 @@ const toRow = <T>(keys: readonly string[], obj: T, autoSetKeys: readonly string[
 			row[[key][0]] = undefined;
 		} else {
 			const value = obj[key as keyof typeof obj];
-			// JSON 필드 처리: 객체나 배열을 문자열로 변환
-			if (value !== null && value !== undefined && typeof value === 'object') {
+			// Date 객체 처리: UTC로 변환하여 MySQL DATETIME 형식 문자열로 저장
+			if (value instanceof Date) {
+				row[[key][0]] = formatDateForMySQLUTC(value);
+			}
+			// 문자열 날짜 처리: 로컬 타임존으로 해석 후 UTC로 변환하여 저장
+			else if (typeof value === 'string' && value !== null && value !== undefined) {
+				// 날짜 필드이거나 날짜 형식 문자열인 경우 UTC로 변환
+				const isDateField = DATE_FIELD_REGEX.test(key) || DATE_FIELD_REGEX.test(convertToSnakeString(String(key)));
+				const isDateString = DATETIME_REGEX.test(value.trim()) || DATE_ONLY_REGEX.test(value.trim());
+				
+				if (isDateField || isDateString) {
+					row[[key][0]] = convertStringDateToUTC(value);
+				} else {
+					row[[key][0]] = value;
+				}
+			}
+			// JSON 필드 처리: 객체나 배열을 문자열로 변환 (Date 제외)
+			else if (value !== null && value !== undefined && typeof value === 'object') {
 				row[[key][0]] = JSON.stringify(value);
 			} else {
 				row[[key][0]] = value;

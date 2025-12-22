@@ -8,7 +8,7 @@ export type ColumnMapping<T> = {
 export type AutoSetColumns<T> = keyof T;
 
 // 비교 연산자 타입
-export type CompareOperator = '=' | '!=' | '>' | '<' | '>=' | '<=' | 'LIKE' | 'IN';
+export type CompareOperator = '=' | '!=' | '>' | '<' | '>=' | '<=' | 'LIKE' | 'IN' | 'IN_JSON';
 
 // LIKE 패턴 타입
 export type LikePattern = 'starts' | 'ends' | 'contains' | 'exact';
@@ -105,9 +105,10 @@ type JsonLikeObject = Record<string, JsonLikePrimitive>;
 export type CompareValue<T> = 
     | T 
     | T[] 
-    | { operator: Exclude<CompareOperator, 'IN' | 'LIKE'>; value: T }
+    | { operator: Exclude<CompareOperator, 'IN' | 'LIKE' | 'IN_JSON'>; value: T }
     | { operator: 'LIKE'; value: T | JsonLikePrimitive | JsonLikeObject | undefined; pattern?: LikePattern }
-    | { operator: 'IN'; value: T[] };
+    | { operator: 'IN'; value: T[] }
+    | { operator: 'IN_JSON'; value: T[] };
 
 // 비교 쿼리 타입
 type CompareQuery<T> = {
