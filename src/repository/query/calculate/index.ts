@@ -1,7 +1,7 @@
 import mysql2 from 'mysql2/promise';
 import { RowDataPacket } from 'mysql2/promise';
 import { handler } from '../../handler';
-import { CompareQuery, QueryOption, Calculate, InferCalculateResult } from '../../../interface/Query';
+import { CompareQuery, QueryOption, Calculate, InferCalculateResult, SelectOption } from '../../../interface/Query';
 import where from '../condition/where';
 import buildSumQuery from './sum';
 import buildCountQuery from './count';
@@ -13,19 +13,22 @@ import buildMaxQuery from './max';
 function calculate<T, TCalculates extends Calculate<string, any>[]>(
 	query: CompareQuery<T> | undefined,
 	option: QueryOption<T>,
-	calculates: TCalculates
+	calculates: TCalculates,
+	selectOptions?: SelectOption<T>
 ): Promise<InferCalculateResult<TCalculates>>;
 function calculate<T, C extends Record<string, number>>(
 	query: CompareQuery<T> | undefined,
 	option: QueryOption<T>,
-	calculates: Calculate<string & keyof C, any>[]
+	calculates: Calculate<string & keyof C, any>[],
+	selectOptions?: SelectOption<T>
 ): Promise<C>;
 
 // 실제 구현
 function calculate<T, C extends Record<string, number> | Calculate<string, any>[]>(
 	query: CompareQuery<T> | undefined,
 	option: QueryOption<T>,
-	calculates: C
+	calculates: C,
+	selectOptions?: SelectOption<T>
 ): Promise<any> {
 	return handler(async connection => {
 	let query_: string;
@@ -125,9 +128,16 @@ function calculate<T, C extends Record<string, number> | Calculate<string, any>[
 	// 기본 쿼리 구성
 	query_ = `SELECT ${calculateParts.join(', ')} FROM ${mysql2.format('??', [option.table])}`;
 
-	// 메인 WHERE 절 추가 (calculate의 조건과는 별개)
+	// WHERE 절 추가 (메인 조건 + OR 조건)
 	if (query && Object.keys(query).length > 0) {
-		const { conditions, values: whereValues } = where(query, option);
+		const { conditions, values: whereValues } = where(query, option, selectOptions?.orConditions);
+		if (conditions.trim()) {
+			query_ += ` WHERE ${conditions}`;
+			values.push(...whereValues);
+		}
+	} else if (selectOptions?.orConditions && selectOptions.orConditions.length > 0) {
+		// 메인 쿼리가 없지만 OR 조건만 있는 경우
+		const { conditions, values: whereValues } = where({} as CompareQuery<T>, option, selectOptions.orConditions);
 		if (conditions.trim()) {
 			query_ += ` WHERE ${conditions}`;
 			values.push(...whereValues);

@@ -5,7 +5,7 @@ const defaultRouter = express.Router();
 
 defaultRouter.get("/", async (req, res) => {
   const tests = await testService.read();
-  return res.json(tests);
+  return res.json({tests,count:await testService.count()});
 });
 
 defaultRouter.post("/", async (req, res) => {

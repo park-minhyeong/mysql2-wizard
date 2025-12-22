@@ -73,7 +73,7 @@ export class SelectQueryBuilder<T> implements ISelectQueryBuilder<T> {
 		return this;
 	}
 	calculate<C extends Record<string, number>>(calculates: Calculate<string & keyof C, T>[]): Promise<C> {
-		return calculate<T, C>(this.query, this.option, calculates);
+		return calculate<T, C>(this.query, this.option, calculates, this.selectOptions);
 	}
 	async execute(): Promise<T[]> {
 		return select(this.query, this.option, this.selectOptions);
