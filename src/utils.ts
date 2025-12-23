@@ -5,6 +5,7 @@ const JSON_FIELD_REGEX = /(json|ask|data|config|settings|metadata|options|params
 const DATE_FIELD_REGEX = /(at|date|time)$/i; // 날짜 필드 식별용 정규식 (createdAt, updatedAt, startedAt 등)
 const DATETIME_REGEX = /^\d{4}-\d{2}-\d{2}(\s\d{2}:\d{2}:\d{2}(\.\d{1,3})?)?$/; // MySQL DATETIME 형식: YYYY-MM-DD 또는 YYYY-MM-DD HH:mm:ss[.SSS]
 const DATE_ONLY_REGEX = /^\d{4}-\d{2}-\d{2}$/; // 날짜만 있는 형식: YYYY-MM-DD
+const ISO8601_REGEX = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,3})?(Z|[+-]\d{2}:\d{2})?$/; // ISO 8601 형식: YYYY-MM-DDTHH:mm:ss[.SSS][Z|±HH:mm]
 
 // JSON 문자열인지 확인하는 함수
 const isJsonString = (str: string): boolean => {
@@ -66,6 +67,19 @@ const convertStringDateToUTC = (dateString: string): string => {
 	// DATE 타입 필드는 날짜만 저장하므로 타임존 변환 불필요
 	if (DATE_ONLY_REGEX.test(trimmed)) {
 		return trimmed;
+	}
+	
+	// ISO 8601 형식 확인: YYYY-MM-DDTHH:mm:ss[.SSS][Z|±HH:mm]
+	// 예: 2025-12-30T00:00:00.000Z, 2025-12-30T00:00:00Z, 2025-12-30T00:00:00+09:00
+	if (ISO8601_REGEX.test(trimmed)) {
+		// Date 객체로 파싱 (자동으로 UTC로 변환됨)
+		const date = new Date(trimmed);
+		
+		// 유효한 날짜인지 확인
+		if (!isNaN(date.getTime())) {
+			// UTC로 변환하여 MySQL 형식 문자열로 반환
+			return formatDateForMySQLUTC(date);
+		}
 	}
 	
 	// MySQL DATETIME/TIMESTAMP 형식 확인: YYYY-MM-DD HH:mm:ss[.SSS]
