@@ -205,26 +205,35 @@ export async function handler<T>(
 ): Promise<T | null> {
   const connection = await getConnection();
   if (connection === null) return null;
-  if (option.useTransaction) await connection.beginTransaction();
+  
+  // 기본값과 병합
+  const opts = {
+    throwError: option.throwError ?? true,
+    printSqlError: option.printSqlError ?? true,
+    rollbackIfError: option.rollbackIfError ?? true,
+    useTransaction: option.useTransaction ?? true,
+  };
+  
+  if (opts.useTransaction) await connection.beginTransaction();
   try {
     const response = await callback(connection);
-    if (option.useTransaction) await connection.commit();
+    if (opts.useTransaction) await connection.commit();
     return response;
   } catch (e) {
-    if (option.useTransaction && option.rollbackIfError)
+    if (opts.useTransaction && opts.rollbackIfError)
       await connection.rollback();
     if (isDbError(e)) {
-      if (option.printSqlError) {
+      if (opts.printSqlError) {
         logger.error("SQL: " + e.sql);
         logger.error("Message: " + e.sqlMessage);
         logger.error("State: " + e.sqlState);
         logger.error("Error number: " + e.errno);
         logger.error("Code: " + e.code);
       }
-      if (option?.throwError) throw new DbError(e);
+      if (opts.throwError) throw new DbError(e);
       return null;
     }
-    if (option?.throwError) throw e;
+    if (opts.throwError) throw e;
     return null;
   } finally {
     // 연결 반환 시 마지막 사용 시간 업데이트 (idleTimeout 관리용)
