@@ -123,7 +123,9 @@ const processCondition = <T>(
 					break;
 			}
 			values.push(likeValue);
-			return `${mysql2.format('??', [snakeKey])} LIKE ?`;
+			// collation 충돌 방지: 컬럼과 값 모두 명시적으로 collation 지정
+			// CAST를 사용하여 값의 collation을 컬럼과 일치시킴
+			return `${mysql2.format('??', [snakeKey])} LIKE CAST(? AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_unicode_ci`;
 		}
 		// 일반 operator인 경우
 		values.push(value.value);

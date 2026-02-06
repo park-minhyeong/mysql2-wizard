@@ -26,7 +26,13 @@ export async function handler<T>(
 			if (useTransaction) await connection.commit();
 			return result;
 		} catch (error) {
-			if (error instanceof Error) {
+			// Deadlock이나 Lock wait timeout은 테스트 환경에서 흔히 발생하므로 로그 출력 생략
+			const isDeadlock = error instanceof Error && (
+				error.message.includes('Deadlock') ||
+				error.message.includes('Lock wait timeout')
+			);
+			
+			if (error instanceof Error && !isDeadlock) {
 				logger.error(error.message);
 				if (printSqlError && 'sql' in error) {
 					logger.error('SQL Error: ' + error);
@@ -44,7 +50,13 @@ export async function handler<T>(
 	} catch (error) {
 		// getConnection()에서 이미 상세 로그가 출력되었으므로 여기서는 간단한 메시지만
 		// 하지만 error 객체에 추가 정보가 있다면 출력
-		if (error instanceof Error && error.message !== 'Failed to get database connection') {
+		// Deadlock이나 Lock wait timeout은 테스트 환경에서 흔히 발생하므로 로그 출력 생략
+		const isDeadlock = error instanceof Error && (
+			error.message.includes('Deadlock') ||
+			error.message.includes('Lock wait timeout')
+		);
+		
+		if (error instanceof Error && error.message !== 'Failed to get database connection' && !isDeadlock) {
 			logger.error(`Connection error: ${error.message}`);
 			if (error.stack) {
 				logger.error(`Stack: ${error.stack}`);
