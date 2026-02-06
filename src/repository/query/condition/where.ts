@@ -65,6 +65,10 @@ const processCondition = <T>(
 		}
 		// LIKE 연산자인 경우 패턴 처리
 		if (value.operator === 'LIKE') {
+			// value가 undefined인 경우 조건 제외
+			if (value.value === undefined) {
+				return null; // 조건을 제외하기 위해 null 반환
+			}
 			// value가 빈 문자열인 경우 조건 제외
 			if (value.value === '') {
 				return null; // 조건을 제외하기 위해 null 반환

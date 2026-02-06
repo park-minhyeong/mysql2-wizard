@@ -80,7 +80,7 @@ const readEnv = () => {
       if (field.type === "TINY" && field.length === 1 && castedBoolean) {
         return field.string() === "1"; // 1 = true, 0 = false
       }
-      
+
       // MariaDB JSON 필드 처리 (환경 변수로 활성화)
       if (enableMariaDbJson && (field.type === "JSON" || field.type === "BLOB")) {
         const value = field.string();
@@ -94,7 +94,7 @@ const readEnv = () => {
           return value;
         }
       }
-      
+
       // DECIMAL/NEWDECIMAL/FLOAT/DOUBLE을 숫자로 캐스팅 (환경 변수로 활성화)
       if (castedDecimalAsNumber) {
         const decimalTypes = ["DECIMAL", "NEWDECIMAL", "FLOAT", "DOUBLE"];
@@ -107,7 +107,7 @@ const readEnv = () => {
           return Number.isNaN(num) ? value : num;
         }
       }
-      
+
       return next();
     },
   };
@@ -135,7 +135,7 @@ setInterval(() => {
     if (poolInternal._allConnections && Array.isArray(poolInternal._allConnections)) {
       const now = Date.now();
       let cleanedCount = 0;
-      
+
       poolInternal._allConnections.forEach((conn: any) => {
         // 커넥션이 오래되었거나 죽은 경우 정리
         if (conn._socket && conn._socket.destroyed) {
@@ -159,7 +159,7 @@ setInterval(() => {
           }
         }
       });
-      
+
       if (cleanedCount > 0 && poolConfig.mysql2Options.debug) {
         logger.debug(`Cleaned up ${cleanedCount} idle connections`);
       }
@@ -205,7 +205,7 @@ export async function handler<T>(
 ): Promise<T | null> {
   const connection = await getConnection();
   if (connection === null) return null;
-  
+
   // 기본값과 병합
   const opts = {
     throwError: option.throwError ?? true,
@@ -213,7 +213,7 @@ export async function handler<T>(
     rollbackIfError: option.rollbackIfError ?? true,
     useTransaction: option.useTransaction ?? true,
   };
-  
+
   if (opts.useTransaction) await connection.beginTransaction();
   try {
     const response = await callback(connection);
@@ -245,11 +245,11 @@ export async function handler<T>(
 export async function getConnection() {
   const maxRetries = poolConfig.connectionRetryCount;
   const baseDelay = poolConfig.connectionRetryDelay;
-  
+
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
       const connection = await pool.getConnection();
-      
+
       // 연결이 살아있는지 확인 (PROTOCOL_CONNECTION_LOST 방지)
       try {
         await connection.ping();
@@ -262,30 +262,30 @@ export async function getConnection() {
         }
         throw new Error('Connection is dead, retrying...');
       }
-      
+
       // 연결의 마지막 사용 시간 기록 (idleTimeout 관리용)
       (connection as any)._lastUse = Date.now();
-      
+
       return connection;
     } catch (e) {
-      const isTooManyConnections = 
-        (e instanceof Error && 
-         (e.message.includes('Too many connections') || 
-          e.message.includes('ER_CON_COUNT_ERROR') ||
-          (e as any).code === 'ER_CON_COUNT_ERROR' ||
-          (e as any).errno === 1040));
-      
-      const isConnectionLost = 
-        (e instanceof Error && 
-         ((e as any).code === 'PROTOCOL_CONNECTION_LOST' ||
-          e.message.includes('Connection lost') ||
-          e.message.includes('The server closed the connection') ||
-          e.message.includes('Connection is dead')));
-      
+      const isTooManyConnections =
+        (e instanceof Error &&
+          (e.message.includes('Too many connections') ||
+            e.message.includes('ER_CON_COUNT_ERROR') ||
+            (e as any).code === 'ER_CON_COUNT_ERROR' ||
+            (e as any).errno === 1040));
+
+      const isConnectionLost =
+        (e instanceof Error &&
+          ((e as any).code === 'PROTOCOL_CONNECTION_LOST' ||
+            e.message.includes('Connection lost') ||
+            e.message.includes('The server closed the connection') ||
+            e.message.includes('Connection is dead')));
+
       // 마지막 시도이거나 "Too many connections"/"Connection lost"가 아닌 경우 상세 로그 출력
       if (attempt === maxRetries || (!isTooManyConnections && !isConnectionLost)) {
         logger.error(`Failed to get database connection (attempt ${attempt + 1}/${maxRetries + 1})`);
-        
+
         // 연결 설정 정보 출력 (비밀번호 제외)
         logger.error("Connection configuration:");
         logger.error(`  Host: ${poolConfig.mysql2Options.host}`);
@@ -294,7 +294,7 @@ export async function getConnection() {
         logger.error(`  Database: ${poolConfig.mysql2Options.database || 'not specified'}`);
         logger.error(`  Connection Limit: ${poolConfig.mysql2Options.connectionLimit}`);
         logger.error(`  Queue Limit: ${poolConfig.mysql2Options.queueLimit}`);
-        
+
         // Pool 상태 정보 (가능한 경우에만)
         try {
           const poolInternal = pool as any;
@@ -311,13 +311,13 @@ export async function getConnection() {
         } catch (statusError) {
           logger.error("  Unable to retrieve pool status");
         }
-        
+
         // 에러 상세 정보
         if (e instanceof Error) {
           logger.error("Error details:");
           logger.error(`  Message: ${e.message}`);
           logger.error(`  Stack: ${e.stack}`);
-          
+
           // MySQL 에러인 경우 추가 정보
           if ('code' in e) {
             logger.error(`  Code: ${(e as any).code}`);
@@ -346,10 +346,10 @@ export async function getConnection() {
         await new Promise(resolve => setTimeout(resolve, delay));
         continue;
       }
-      
+
       return null;
     }
   }
-  
+
   return null;
 }
