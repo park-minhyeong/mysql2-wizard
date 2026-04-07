@@ -10,25 +10,20 @@ const repo = repository<Test, never>({
 });
 
 async function read(): Promise<Test[]> {
-  return await repo.select().or({
-    numbers:{
-      operator: 'IN_JSON',
-      value: [[12, 15]],
-    }
-  });
+  return await repo.select();
 }
 async function count(): Promise<number> {
-  const result= await repo.select().
-  or({
-    numbers:{
-      operator: 'IN_JSON',
-      value: [[12]],
-    }
-  }).
-  calculate([{
-    fn: 'COUNT',
-    alias: 'count',
-  }]);
+  const result = await repo.select().
+    or({
+      numbers: {
+        operator: 'IN_JSON',
+        value: [[12]],
+      }
+    }).
+    calculate([{
+      fn: 'COUNT',
+      alias: 'count',
+    }]);
   return result.count;
 }
 
