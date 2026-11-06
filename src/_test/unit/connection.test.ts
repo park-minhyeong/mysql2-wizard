@@ -7,9 +7,6 @@ const mocks = vi.hoisted(() => ({
 	poolGetConnection: vi.fn(),
 	poolConfig: {
 		mysql2Options: { host: 'h', port: 3306, user: 'u', database: 'd', connectionLimit: 10, queueLimit: 0 },
-		connectionRetryCount: 2,
-		connectionRetryDelay: 0,
-		pingOnAcquire: true,
 	},
 }));
 
@@ -18,6 +15,12 @@ vi.mock('../../core/pool', () => ({
 	poolConfig: mocks.poolConfig,
 	getPoolStatus: () => ({ total: 1, free: 0, queue: 0 }),
 }));
+
+// 재시도 상수는 고정값이라 테스트에서는 2회 / 0ms 로 덮어쓴다
+vi.mock('../../core/env', async (importOriginal) => {
+	const actual = await importOriginal<typeof import('../../core/env')>();
+	return { ...actual, CONNECTION_RETRY_COUNT: 2, CONNECTION_RETRY_DELAY_MS: 0 };
+});
 
 const makeConnection = (pingError?: Error) => ({
 	ping: pingError ? vi.fn().mockRejectedValue(pingError) : vi.fn().mockResolvedValue(undefined),
@@ -33,8 +36,6 @@ describe('getConnection()', () => {
 
 	beforeEach(() => {
 		mocks.poolGetConnection.mockReset();
-		mocks.poolConfig.pingOnAcquire = true;
-		mocks.poolConfig.connectionRetryCount = 2;
 		sink = { log: vi.fn(), error: vi.fn(), warn: vi.fn(), debug: vi.fn() };
 		configureLogging({ level: 'debug', logger: sink });
 	});
@@ -49,14 +50,6 @@ describe('getConnection()', () => {
 		await expect(getConnection()).resolves.toBe(conn);
 		expect(conn.ping).toHaveBeenCalledTimes(1);
 		expect(sink.error).not.toHaveBeenCalled();
-	});
-
-	it('pingOnAcquire=false 면 ping 하지 않는다', async () => {
-		mocks.poolConfig.pingOnAcquire = false;
-		const conn = makeConnection();
-		mocks.poolGetConnection.mockResolvedValue(conn);
-		await getConnection();
-		expect(conn.ping).not.toHaveBeenCalled();
 	});
 
 	it('ping 실패 → destroy 후 재시도 (warn 1회), 두 번째 connection 반환', async () => {

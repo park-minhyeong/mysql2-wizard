@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { parseMysqlDatabaseUrl, readEnv, readWizardEnv, createTypeCast, type TypeCastField as Field } from '../../core/env';
+import { parseMysqlDatabaseUrl, readEnv, readWizardEnv, findRemovedEnvKeys, createTypeCast, type TypeCastField as Field } from '../../core/env';
 
 describe('parseMysqlDatabaseUrl()', () => {
 	it('호스트/포트/계정/DB 파싱, 기본 포트 3306', () => {
@@ -54,11 +54,17 @@ describe('readEnv()', () => {
 		});
 		expect(config.mysql2Options.database).toBeUndefined();
 		expect(config.dbType).toBe('mysql');
-		expect(config.connectionRetryCount).toBe(3);
-		expect(config.connectionRetryDelay).toBe(1000);
-		expect(config.convertDateToUTC).toBe(true);
 		// mysql2가 인식하지 못하는 옵션은 넘기지 않는다
 		expect('reconnect' in config.mysql2Options).toBe(false);
+	});
+
+	it('항상 켜진 동작은 env로 끌 수 없고, 제외된 키는 findRemovedEnvKeys 로 감지한다', () => {
+		const config = readEnv({ DB_ENABLE_KEEP_ALIVE: 'false', DB_IDLE_TIMEOUT: '1', DB_CONNECTION_RETRY_COUNT: '9' });
+		expect(config.mysql2Options.enableKeepAlive).toBe(true);
+		expect('idleTimeout' in config.mysql2Options).toBe(false);
+		expect(findRemovedEnvKeys({ DB_ENABLE_KEEP_ALIVE: 'false', DB_CONNECTION_RETRY_COUNT: '9', DB_HOST: 'h' }))
+			.toEqual(['DB_ENABLE_KEEP_ALIVE', 'DB_CONNECTION_RETRY_COUNT']);
+		expect(findRemovedEnvKeys({})).toEqual([]);
 	});
 
 	it('DB_URL이 개별 변수보다 우선, 나머지는 개별 변수', () => {
@@ -73,27 +79,9 @@ describe('readEnv()', () => {
 
 	it('숫자 env가 잘못되면 에러', () => {
 		expect(() => readEnv({ DB_PORT: 'abc' })).toThrow('Invalid number value for DB_PORT');
-		expect(() => readEnv({ MYSQL2_WIZARD_CONNECTION_RETRY_COUNT: 'x' })).toThrow('Invalid number value for MYSQL2_WIZARD_CONNECTION_RETRY_COUNT');
 	});
 
-	it('MYSQL2_WIZARD_* 가 예전 이름보다 우선, 예전 이름만 있으면 fallback', () => {
-		const prefixed = readEnv({
-			MYSQL2_WIZARD_CONNECTION_RETRY_COUNT: '7', DB_CONNECTION_RETRY_COUNT: '1',
-			MYSQL2_WIZARD_CONVERT_DATE_TO_UTC: 'false', DB_CONVERT_DATE_TO_UTC: 'true',
-			MYSQL2_WIZARD_PING_ON_ACQUIRE: 'false',
-		});
-		expect(prefixed.connectionRetryCount).toBe(7);
-		expect(prefixed.convertDateToUTC).toBe(false);
-		expect(prefixed.pingOnAcquire).toBe(false);
-
-		const legacy = readEnv({ DB_CONNECTION_RETRY_COUNT: '1', DB_CONNECTION_RETRY_DELAY: '50', DB_CONVERT_DATE_TO_UTC: 'false' });
-		expect(legacy.connectionRetryCount).toBe(1);
-		expect(legacy.connectionRetryDelay).toBe(50);
-		expect(legacy.convertDateToUTC).toBe(false);
-		expect(legacy.pingOnAcquire).toBe(true);
-	});
-
-	it('typeCast 플래그도 MYSQL2_WIZARD_* 우선', () => {
+	it('typeCast 플래그는 MYSQL2_WIZARD_* 우선, 예전 이름만 있으면 fallback', () => {
 		const field: Field = { type: 'TINY', length: 1, db: '', table: '', name: '', string: () => '1', buffer: () => null, geometry: () => null };
 		const next = () => 'NEXT';
 		const cast = (env: Record<string, string>) => readEnv(env).mysql2Options.typeCast;
@@ -101,15 +89,6 @@ describe('readEnv()', () => {
 		expect(call(cast({ MYSQL2_WIZARD_CASTED_BOOLEAN: 'true', CASTED_BOOLEAN: 'false' }))).toBe(true);
 		expect(call(cast({ CASTED_BOOLEAN: 'true' }))).toBe(true);
 		expect(call(cast({ MYSQL2_WIZARD_CASTED_BOOLEAN: 'false', CASTED_BOOLEAN: 'true' }))).toBe('NEXT');
-	});
-
-	it('DB_IDLE_TIMEOUT / DB_MAX_IDLE 은 설정했을 때만 mysql2 옵션으로 넘긴다', () => {
-		const none = readEnv({});
-		expect('idleTimeout' in none.mysql2Options).toBe(false);
-		expect('maxIdle' in none.mysql2Options).toBe(false);
-		const set = readEnv({ DB_IDLE_TIMEOUT: '60000', DB_MAX_IDLE: '5' });
-		expect(set.mysql2Options.idleTimeout).toBe(60000);
-		expect(set.mysql2Options.maxIdle).toBe(5);
 	});
 
 	it('readWizardEnv 는 어느 키에서 읽었는지 돌려준다', () => {

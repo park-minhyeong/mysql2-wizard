@@ -1,6 +1,7 @@
 import type { Connection, PoolConnection } from "mysql2/promise";
 import { logger, isLogEnabled } from "../log";
 import { pool, poolConfig, getPoolStatus } from "./pool";
+import { CONNECTION_RETRY_COUNT, CONNECTION_RETRY_DELAY_MS } from "./env";
 import { getErrorProperty } from "./error";
 
 const isTooManyConnectionsError = (e: unknown): boolean =>
@@ -58,24 +59,22 @@ const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve,
  * 실패하면 null (호출자가 PoolError 처리).
  */
 export async function getConnection(): Promise<PoolConnection | null> {
-  const maxRetries = poolConfig.connectionRetryCount;
-  const baseDelay = poolConfig.connectionRetryDelay;
+  const maxRetries = CONNECTION_RETRY_COUNT;
+  const baseDelay = CONNECTION_RETRY_DELAY_MS;
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
       const connection = await pool.getConnection();
-      if (poolConfig.pingOnAcquire) {
+      try {
+        // 죽은 connection(PROTOCOL_CONNECTION_LOST) 방지
+        await connection.ping();
+      } catch {
         try {
-          // 죽은 connection(PROTOCOL_CONNECTION_LOST) 방지
-          await connection.ping();
+          connection.destroy();
         } catch {
-          try {
-            connection.destroy();
-          } catch {
-            // 이미 닫힌 소켓이면 무시
-          }
-          throw new Error("Connection is dead, retrying...");
+          // 이미 닫힌 소켓이면 무시
         }
+        throw new Error("Connection is dead, retrying...");
       }
       return connection;
     } catch (e) {

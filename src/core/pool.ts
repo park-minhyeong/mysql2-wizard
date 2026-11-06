@@ -1,10 +1,15 @@
 import mysql2 from "mysql2/promise";
 import type { Pool } from "mysql2/promise";
-import { readEnv, type PoolRuntimeConfig } from "./env";
+import { readEnv, findRemovedEnvKeys, type PoolRuntimeConfig } from "./env";
 import { logger } from "../log";
 import { getErrorProperty } from "./error";
 
 export const poolConfig = readEnv();
+
+const removedKeys = findRemovedEnvKeys();
+if (removedKeys.length > 0) {
+  logger.warn(`Ignored env (always-on since 2.1.0, remove from .env): ${removedKeys.join(", ")}`);
+}
 
 /**
  * Pool은 프로세스당 하나만 둔다.
@@ -45,7 +50,6 @@ const getOrCreatePool = (): Pool => {
 
 export const pool = getOrCreatePool();
 export const dbType = poolConfig.dbType;
-export const convertDateToUTC = poolConfig.convertDateToUTC;
 
 /** mysql2 Pool 내부 큐(Denque) 길이만 읽는다. 진단 로그 전용. */
 interface PoolInternals {

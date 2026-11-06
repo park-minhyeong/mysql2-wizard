@@ -376,9 +376,9 @@ const userService = {
 Create a `.env` file in your project root:
 
 환경 변수 원칙:
-- **접속(mysql2 pool 옵션)** 에 필요한 값은 `DB_*`
-- **이 라이브러리 고유 동작**은 `MYSQL2_WIZARD_*` — 다른 패키지와 이름이 겹치는 `DEBUG`, `CASTED_BOOLEAN` 같은 일반 이름 때문에 생기는 사이드이펙트를 피합니다.
-- 예전 이름(`CASTED_BOOLEAN`, `DB_CONNECTION_RETRY_COUNT` 등)은 계속 읽습니다(fallback). 둘 다 있으면 `MYSQL2_WIZARD_*`가 우선합니다.
+- **접속(mysql2 pool 옵션)** 에 필요한 값만 `DB_*`
+- **결과 타입 변환**처럼 DB/컬럼 성격에 따라 갈리는 것만 `MYSQL2_WIZARD_*` (예전 무접두 이름은 fallback으로 계속 읽음, 둘 다 있으면 `MYSQL2_WIZARD_*` 우선)
+- 대부분의 경우 이로운 동작(keep-alive, 빌릴 때 ping, 재시도, idle 정리, pool 재사용)은 **항상 켜져 있고 env가 없습니다.**
 
 ```env
 # 접속 (DB_*)
@@ -393,19 +393,12 @@ DB_QUEUE_LIMIT=0
 DB_WAIT_FOR_CONNECTIONS=true
 DB_MULTIPLE_STATEMENTS=false
 DB_DEBUG=false                # mysql2 프로토콜 디버그
-DB_ENABLE_KEEP_ALIVE=true
-# DB_IDLE_TIMEOUT=60000       # (선택) idle connection 정리, ms — mysql2 idleTimeout
-# DB_MAX_IDLE=10              # (선택) 유지할 idle connection 수 — mysql2 maxIdle
 
-# 라이브러리 동작 (MYSQL2_WIZARD_*)
+# 라이브러리 (MYSQL2_WIZARD_*)
 MYSQL2_WIZARD_LOG_LEVEL=info              # silent | error | warn | info | debug
-MYSQL2_WIZARD_CASTED_BOOLEAN=true
-MYSQL2_WIZARD_CASTED_DECIMAL_AS_NUMBER=true
-MYSQL2_WIZARD_ENABLE_MARIADB_JSON=false
-MYSQL2_WIZARD_CONNECTION_RETRY_COUNT=3
-MYSQL2_WIZARD_CONNECTION_RETRY_DELAY=1000
-MYSQL2_WIZARD_CONVERT_DATE_TO_UTC=true
-MYSQL2_WIZARD_PING_ON_ACQUIRE=true
+MYSQL2_WIZARD_CASTED_BOOLEAN=true         # fallback: CASTED_BOOLEAN
+MYSQL2_WIZARD_CASTED_DECIMAL_AS_NUMBER=true  # fallback: CASTED_DECIMAL_AS_NUMBER
+MYSQL2_WIZARD_ENABLE_MARIADB_JSON=false   # fallback: ENABLE_MARIADB_JSON
 ```
 
 또는 Prisma 스타일 URL 하나로 지정할 수 있습니다 (개별 `DB_*` 접속 변수보다 우선):
@@ -414,17 +407,20 @@ MYSQL2_WIZARD_PING_ON_ACQUIRE=true
 DB_URL=mysql://user:password@host:3306/database?sslca=~/certs/ca.pem&sslaccept=strict&connect_timeout=10
 ```
 
-설명 (`MYSQL2_WIZARD_*` — 괄호는 fallback으로 읽는 예전 이름):
-- `LOG_LEVEL`(기본값: info): 라이브러리 로그 상한. `error`는 SQL/연결 실패 요약만, `warn`은 재시도 알림 추가, `info`는 `printQuery` 쿼리 로그 추가, `debug`는 실행 SQL·접속 설정·pool 상태·stack까지. 운영 서버는 `warn` 또는 `error` 권장. (하위 호환: 미설정이고 `DEBUG=true`면 debug)
-- `CASTED_BOOLEAN`(`CASTED_BOOLEAN`): TINYINT(1)을 boolean으로 캐스팅합니다.
-- `CASTED_DECIMAL_AS_NUMBER`(`CASTED_DECIMAL_AS_NUMBER`, 기본값: true): DECIMAL/NEWDECIMAL/FLOAT/DOUBLE 결과를 숫자로 캐스팅합니다. 정밀도가 중요한 금액/빅넘버 컬럼에서는 `false` 권장.
-- `ENABLE_MARIADB_JSON`(`ENABLE_MARIADB_JSON`): MariaDB에서 JSON/LONGTEXT(BLOB) 컬럼을 JSON.parse 합니다.
-- `CONNECTION_RETRY_COUNT`(`DB_CONNECTION_RETRY_COUNT`, 기본값: 3): "Too many connections" / "Connection lost" 시 재시도 횟수.
-- `CONNECTION_RETRY_DELAY`(`DB_CONNECTION_RETRY_DELAY`, 기본값: 1000): 재시도 간격(ms). 지수 백오프 (1초, 2초, 4초...).
-- `CONVERT_DATE_TO_UTC`(`DB_CONVERT_DATE_TO_UTC`, 기본값: true): Date 컬럼 저장 시 UTC 변환.
-- `PING_ON_ACQUIRE`(기본값: true): pool에서 connection을 빌릴 때마다 `ping`으로 생존을 확인합니다. 쿼리마다 왕복 1회가 추가되므로 지연이 민감하면 `false`로 끄고 `DB_ENABLE_KEEP_ALIVE`/`DB_IDLE_TIMEOUT`에 맡기세요.
-- `DB_ENABLE_KEEP_ALIVE`(기본값: true): Keep-alive 패킷으로 연결을 유지합니다.
-- `DB_IDLE_TIMEOUT` / `DB_MAX_IDLE`: 설정했을 때만 mysql2 `idleTimeout`/`maxIdle`로 넘깁니다. 2.0.x의 `DB_IDLE_TIMEOUT`은 실제로 동작하지 않았고, `DB_ENABLE_RECONNECT`는 mysql2가 인식하지 않는 옵션이라 `Ignoring invalid configuration option passed to Connection: reconnect` 경고만 찍었습니다 — 2.1.0부터 제거되어 더 이상 읽지 않습니다.
+설명:
+- `MYSQL2_WIZARD_LOG_LEVEL`(기본값: info): 라이브러리 로그 상한. `error`는 SQL/연결 실패 요약만, `warn`은 재시도 알림 추가, `info`는 `printQuery` 쿼리 로그 추가, `debug`는 실행 SQL·접속 설정·pool 상태·stack까지. 운영 서버는 `warn` 또는 `error` 권장. (하위 호환: 미설정이고 `DEBUG=true`면 debug)
+- `MYSQL2_WIZARD_CASTED_BOOLEAN`(기본값: false): TINYINT(1)을 boolean으로 캐스팅합니다.
+- `MYSQL2_WIZARD_CASTED_DECIMAL_AS_NUMBER`(기본값: true): DECIMAL/NEWDECIMAL/FLOAT/DOUBLE 결과를 숫자로 캐스팅합니다. 정밀도가 중요한 금액/빅넘버 컬럼에서는 `false` 권장.
+- `MYSQL2_WIZARD_ENABLE_MARIADB_JSON`(기본값: false): MariaDB에서 JSON/LONGTEXT(BLOB) 컬럼을 JSON.parse 합니다. (바이너리 BLOB 컬럼이 있으면 켜지 마세요)
+
+항상 켜져 있는 동작 (설정 없음):
+- Keep-alive 패킷으로 연결 유지 (mysql2 `enableKeepAlive`)
+- pool에서 connection을 빌릴 때 `ping`으로 생존 확인 → 죽은 connection은 버리고 재시도
+- "Too many connections" / "Connection lost" 시 지수 백오프 재시도 (3회, 1초·2초·4초)
+- idle connection 정리는 mysql2 기본값 (`idleTimeout` 60초, `maxIdle` = `connectionLimit`)
+- Date 저장 시 UTC 변환
+
+2.1.0부터 읽지 않는 키 (설정돼 있으면 기동 시 `warn` 한 줄로 알림): `DB_ENABLE_RECONNECT`, `DB_IDLE_TIMEOUT`, `DB_ENABLE_KEEP_ALIVE`, `DB_CONNECTION_RETRY_COUNT`, `DB_CONNECTION_RETRY_DELAY`, `DB_CONVERT_DATE_TO_UTC`. 특히 `reconnect`는 mysql2가 인식하지 않는 옵션이라 connection마다 `Ignoring invalid configuration option passed to Connection: reconnect` 경고만 찍던 것으로, 이제 넘기지 않습니다.
 
 ### 로깅 제어 (코드)
 

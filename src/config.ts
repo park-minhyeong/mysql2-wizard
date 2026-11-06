@@ -3,7 +3,7 @@ import { DbError, isDbError, type DbErrorInterface } from "./interface";
 import { logger } from "./log";
 import { getConnection, releaseConnection, runInTransaction } from "./core/connection";
 
-export { pool, dbType, convertDateToUTC } from "./core/pool";
+export { pool, dbType } from "./core/pool";
 export { getConnection } from "./core/connection";
 
 export type ResultSetHeader = mysql2.ResultSetHeader;
