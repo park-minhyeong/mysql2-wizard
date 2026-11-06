@@ -48,21 +48,24 @@ export async function handler<T>(
 			connection.release();
 		}
 	} catch (error) {
-		// getConnection()에서 이미 상세 로그가 출력되었으므로 여기서는 간단한 메시지만
-		// 하지만 error 객체에 추가 정보가 있다면 출력
-		// Deadlock이나 Lock wait timeout은 테스트 환경에서 흔히 발생하므로 로그 출력 생략
+		// getConnection() null → 위에서 이미 PoolError. 그 외(SQL 등)는 원본을 유지해야 원인을 알 수 있음.
 		const isDeadlock = error instanceof Error && (
 			error.message.includes('Deadlock') ||
 			error.message.includes('Lock wait timeout')
 		);
-		
-		if (error instanceof Error && error.message !== 'Failed to get database connection' && !isDeadlock) {
+
+		if (error instanceof PoolError) {
+			if (throwError) throw error;
+			return null as T;
+		}
+
+		if (error instanceof Error && !isDeadlock) {
 			logger.error(`Connection error: ${error.message}`);
 			if (error.stack) {
 				logger.error(`Stack: ${error.stack}`);
 			}
 		}
-		if (throwError) throw new PoolError('Failed to get database connection');
+		if (throwError) throw error;
 		return null as T;
 	}
 }
