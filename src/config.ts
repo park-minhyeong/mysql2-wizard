@@ -16,12 +16,10 @@ type HandlerOption = {
   useTransaction?: boolean;
 };
 
+// 요약은 error 한 줄, 실행 SQL은 debug 레벨 (운영 로그에 바인딩 값이 섞이지 않도록)
 const logDbError = (e: DbErrorInterface) => {
-  logger.error("SQL: " + e.sql);
-  logger.error("Message: " + e.sqlMessage);
-  logger.error("State: " + e.sqlState);
-  logger.error("Error number: " + e.errno);
-  logger.error("Code: " + e.code);
+  logger.error(`SQL error ${e.code} (errno=${e.errno}, state=${e.sqlState}): ${e.sqlMessage}`);
+  logger.debug("SQL: " + e.sql);
 };
 
 /**

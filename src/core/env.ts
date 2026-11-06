@@ -103,28 +103,75 @@ export function parseMysqlDatabaseUrl(databaseUrl: string): ParsedDatabaseUrl {
   return { host, port, user, password, database, ssl: sslOption, connectTimeoutMs };
 }
 
-type EnvRecord = Record<string, string | undefined>;
+export type EnvRecord = Record<string, string | undefined>;
 
-const readBooleanEnv = (record: EnvRecord, key: string, defaultValue: boolean): boolean => {
-  const value = record[key];
-  if (value === undefined) return defaultValue;
+/**
+ * 환경 변수 원칙
+ * - 접속(mysql2 pool 옵션)에 필요한 값은 `DB_*`
+ * - 이 라이브러리 고유 동작은 `MYSQL2_WIZARD_*` (다른 패키지의 `DEBUG`, `CASTED_BOOLEAN` 같은 일반 이름과 충돌 방지)
+ * - 예전 이름(`CASTED_BOOLEAN`, `DB_CONNECTION_RETRY_COUNT` 등)은 fallback으로 계속 읽는다. 둘 다 있으면 `MYSQL2_WIZARD_*` 우선.
+ */
+export const WIZARD_ENV_PREFIX = "MYSQL2_WIZARD_";
+
+/** 라이브러리 고유 옵션 → (우선) `MYSQL2_WIZARD_<name>`, (fallback) 예전 키들 */
+export const WIZARD_ENV_KEYS = {
+  CASTED_BOOLEAN: ["CASTED_BOOLEAN"],
+  ENABLE_MARIADB_JSON: ["ENABLE_MARIADB_JSON"],
+  CASTED_DECIMAL_AS_NUMBER: ["CASTED_DECIMAL_AS_NUMBER"],
+  CONNECTION_RETRY_COUNT: ["DB_CONNECTION_RETRY_COUNT"],
+  CONNECTION_RETRY_DELAY: ["DB_CONNECTION_RETRY_DELAY"],
+  CONVERT_DATE_TO_UTC: ["DB_CONVERT_DATE_TO_UTC"],
+  PING_ON_ACQUIRE: [],
+  LOG_LEVEL: [],
+} as const satisfies Record<string, readonly string[]>;
+
+export type WizardEnvName = keyof typeof WIZARD_ENV_KEYS;
+
+/** `MYSQL2_WIZARD_<name>` → 예전 키 순으로 처음 정의된 값. 어느 키에서 읽었는지도 돌려준다. */
+export const readWizardEnv = (record: EnvRecord, name: WizardEnvName): { key: string; value: string } | undefined => {
+  const candidates = [WIZARD_ENV_PREFIX + name, ...WIZARD_ENV_KEYS[name]];
+  for (const key of candidates) {
+    const value = record[key];
+    if (value !== undefined) return { key, value };
+  }
+  return undefined;
+};
+
+const parseBoolean = (value: string | undefined, defaultValue: boolean): boolean => {
   if (value === "true") return true;
   if (value === "false") return false;
   return defaultValue;
 };
 
-const readNumberEnv = (record: EnvRecord, key: string, defaultValue: number): number => {
-  const value = record[key];
+const parseNumber = (key: string, value: string | undefined, defaultValue: number): number => {
   if (value === undefined) return defaultValue;
   const number = Number(value);
   if (isNaN(number)) throw new Error(`Invalid number value for ${key}: ${value}`);
   return number;
 };
 
+const readBooleanEnv = (record: EnvRecord, key: string, defaultValue: boolean): boolean =>
+  parseBoolean(record[key], defaultValue);
+
+const readNumberEnv = (record: EnvRecord, key: string, defaultValue: number): number =>
+  parseNumber(key, record[key], defaultValue);
+
+/** 숫자 env가 없으면 undefined (옵션을 아예 넘기지 않기 위해) */
+const readOptionalNumberEnv = (record: EnvRecord, key: string): number | undefined =>
+  record[key] === undefined ? undefined : parseNumber(key, record[key], 0);
+
 const readStringEnv = (record: EnvRecord, key: string, defaultValue: string): string => {
   const value = record[key];
   if (value === undefined) return defaultValue;
   return value;
+};
+
+const readWizardBoolean = (record: EnvRecord, name: WizardEnvName, defaultValue: boolean): boolean =>
+  parseBoolean(readWizardEnv(record, name)?.value, defaultValue);
+
+const readWizardNumber = (record: EnvRecord, name: WizardEnvName, defaultValue: number): number => {
+  const found = readWizardEnv(record, name);
+  return found ? parseNumber(found.key, found.value, defaultValue) : defaultValue;
 };
 
 export interface TypeCastFlags {
@@ -168,6 +215,8 @@ export interface PoolRuntimeConfig {
   connectionRetryCount: number;
   connectionRetryDelay: number;
   convertDateToUTC: boolean;
+  /** connection을 빌릴 때마다 ping으로 생존 확인 (기본 true). 왕복 1회 비용, 끄면 죽은 connection은 쿼리 실패 후 재시도에 의존 */
+  pingOnAcquire: boolean;
 }
 
 export const readEnv = (env: EnvRecord = process.env): PoolRuntimeConfig => {
@@ -184,14 +233,20 @@ export const readEnv = (env: EnvRecord = process.env): PoolRuntimeConfig => {
   const waitForConnections = readBooleanEnv(env, "DB_WAIT_FOR_CONNECTIONS", true);
   const multipleStatements = readBooleanEnv(env, "DB_MULTIPLE_STATEMENTS", false);
   const debug = readBooleanEnv(env, "DB_DEBUG", false);
-  const castedBoolean = readBooleanEnv(env, "CASTED_BOOLEAN", false);
-  const enableMariaDbJson = readBooleanEnv(env, "ENABLE_MARIADB_JSON", false);
-  const castedDecimalAsNumber = readBooleanEnv(env, "CASTED_DECIMAL_AS_NUMBER", true);
-  const dbType = readStringEnv(env, "DB_TYPE", "mysql").toLowerCase();
-  const connectionRetryCount = readNumberEnv(env, "DB_CONNECTION_RETRY_COUNT", 3);
-  const connectionRetryDelay = readNumberEnv(env, "DB_CONNECTION_RETRY_DELAY", 1000);
   const enableKeepAlive = readBooleanEnv(env, "DB_ENABLE_KEEP_ALIVE", true);
-  const convertDateToUTC = readBooleanEnv(env, "DB_CONVERT_DATE_TO_UTC", true);
+  const dbType = readStringEnv(env, "DB_TYPE", "mysql").toLowerCase();
+  // mysql2 네이티브 idle 정리. 설정했을 때만 넘긴다 (미설정 시 mysql2 기본값 유지)
+  const idleTimeout = readOptionalNumberEnv(env, "DB_IDLE_TIMEOUT");
+  const maxIdle = readOptionalNumberEnv(env, "DB_MAX_IDLE");
+
+  // 라이브러리 고유 동작: MYSQL2_WIZARD_* 우선, 예전 이름 fallback
+  const castedBoolean = readWizardBoolean(env, "CASTED_BOOLEAN", false);
+  const enableMariaDbJson = readWizardBoolean(env, "ENABLE_MARIADB_JSON", false);
+  const castedDecimalAsNumber = readWizardBoolean(env, "CASTED_DECIMAL_AS_NUMBER", true);
+  const connectionRetryCount = readWizardNumber(env, "CONNECTION_RETRY_COUNT", 3);
+  const connectionRetryDelay = readWizardNumber(env, "CONNECTION_RETRY_DELAY", 1000);
+  const convertDateToUTC = readWizardBoolean(env, "CONVERT_DATE_TO_UTC", true);
+  const pingOnAcquire = readWizardBoolean(env, "PING_ON_ACQUIRE", true);
 
   const mysql2Options: PoolOptions = {
     host,
@@ -207,9 +262,11 @@ export const readEnv = (env: EnvRecord = process.env): PoolRuntimeConfig => {
     multipleStatements,
     debug,
     enableKeepAlive,
+    ...(idleTimeout !== undefined ? { idleTimeout } : {}),
+    ...(maxIdle !== undefined ? { maxIdle } : {}),
     dateStrings: true,
     typeCast: createTypeCast({ castedBoolean, enableMariaDbJson, castedDecimalAsNumber }),
   };
 
-  return { mysql2Options, dbType, connectionRetryCount, connectionRetryDelay, convertDateToUTC };
+  return { mysql2Options, dbType, connectionRetryCount, connectionRetryDelay, convertDateToUTC, pingOnAcquire };
 };

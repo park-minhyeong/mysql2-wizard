@@ -1,5 +1,5 @@
 import type { Connection, PoolConnection } from "mysql2/promise";
-import { logger } from "../log";
+import { logger, isLogEnabled } from "../log";
 import { pool, poolConfig, getPoolStatus } from "./pool";
 import { getErrorProperty } from "./error";
 
@@ -17,41 +17,37 @@ const isConnectionLostError = (e: unknown): boolean =>
     e.message.includes("The server closed the connection") ||
     e.message.includes("Connection is dead"));
 
+/**
+ * 연결 실패 로그. 요약(메시지/code)은 error, 접속 설정·pool 상태·stack 같은 상세는 debug 레벨.
+ */
 const logConnectionFailure = (attempt: number, maxRetries: number, e: unknown): void => {
-  logger.error(`Failed to get database connection (attempt ${attempt + 1}/${maxRetries + 1})`);
+  const summary =
+    e instanceof Error
+      ? `${e.message}${getErrorProperty(e, "code") !== undefined ? ` (${String(getErrorProperty(e, "code"))})` : ""}`
+      : `Unknown error type: ${typeof e}`;
+  logger.error(`Failed to get database connection (attempt ${attempt + 1}/${maxRetries + 1}): ${summary}`);
+
+  if (!isLogEnabled("debug")) return;
 
   // 연결 설정 정보 출력 (비밀번호 제외)
   const { host, port, user, database, connectionLimit, queueLimit } = poolConfig.mysql2Options;
-  logger.error("Connection configuration:");
-  logger.error(`  Host: ${host}`);
-  logger.error(`  Port: ${port}`);
-  logger.error(`  User: ${user}`);
-  logger.error(`  Database: ${database || "not specified"}`);
-  logger.error(`  Connection Limit: ${connectionLimit}`);
-  logger.error(`  Queue Limit: ${queueLimit}`);
+  logger.debug(`Connection configuration: host=${host} port=${port} user=${user} database=${database || "not specified"} connectionLimit=${connectionLimit} queueLimit=${queueLimit}`);
 
   const status = getPoolStatus();
-  logger.error("Pool status:");
-  if (status.total !== undefined) logger.error(`  Total connections: ${status.total}`);
-  if (status.free !== undefined) logger.error(`  Free connections: ${status.free}`);
-  if (status.queue !== undefined) logger.error(`  Queue length: ${status.queue}`);
+  logger.debug(`Pool status: total=${status.total ?? "?"} free=${status.free ?? "?"} queue=${status.queue ?? "?"}`);
 
   if (e instanceof Error) {
-    logger.error("Error details:");
-    logger.error(`  Message: ${e.message}`);
-    logger.error(`  Stack: ${e.stack}`);
     for (const [key, label] of [
-      ["code", "Code"],
-      ["errno", "Error Number"],
-      ["sqlState", "SQL State"],
-      ["sqlMessage", "SQL Message"],
+      ["errno", "errno"],
+      ["sqlState", "sqlState"],
+      ["sqlMessage", "sqlMessage"],
     ] as const) {
       const value = getErrorProperty(e, key);
-      if (value !== undefined) logger.error(`  ${label}: ${String(value)}`);
+      if (value !== undefined) logger.debug(`  ${label}: ${String(value)}`);
     }
+    if (e.stack) logger.debug(`Stack: ${e.stack}`);
   } else {
-    logger.error(`  Unknown error type: ${typeof e}`);
-    logger.error(`  Error value: ${JSON.stringify(e)}`);
+    logger.debug(`Error value: ${JSON.stringify(e)}`);
   }
 };
 
@@ -68,16 +64,18 @@ export async function getConnection(): Promise<PoolConnection | null> {
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
       const connection = await pool.getConnection();
-      try {
-        // 죽은 connection(PROTOCOL_CONNECTION_LOST) 방지
-        await connection.ping();
-      } catch {
+      if (poolConfig.pingOnAcquire) {
         try {
-          connection.destroy();
+          // 죽은 connection(PROTOCOL_CONNECTION_LOST) 방지
+          await connection.ping();
         } catch {
-          // 이미 닫힌 소켓이면 무시
+          try {
+            connection.destroy();
+          } catch {
+            // 이미 닫힌 소켓이면 무시
+          }
+          throw new Error("Connection is dead, retrying...");
         }
-        throw new Error("Connection is dead, retrying...");
       }
       return connection;
     } catch (e) {
@@ -88,7 +86,7 @@ export async function getConnection(): Promise<PoolConnection | null> {
       }
       const delay = baseDelay * Math.pow(2, attempt);
       const reason = isTooManyConnectionsError(e) ? "Too many connections" : "Connection lost";
-      logger.error(`${reason} detected (attempt ${attempt + 1}/${maxRetries + 1}). Retrying in ${delay}ms...`);
+      logger.warn(`${reason} detected (attempt ${attempt + 1}/${maxRetries + 1}). Retrying in ${delay}ms...`);
       await sleep(delay);
     }
   }

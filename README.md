@@ -375,22 +375,37 @@ const userService = {
 
 Create a `.env` file in your project root:
 
+환경 변수 원칙:
+- **접속(mysql2 pool 옵션)** 에 필요한 값은 `DB_*`
+- **이 라이브러리 고유 동작**은 `MYSQL2_WIZARD_*` — 다른 패키지와 이름이 겹치는 `DEBUG`, `CASTED_BOOLEAN` 같은 일반 이름 때문에 생기는 사이드이펙트를 피합니다.
+- 예전 이름(`CASTED_BOOLEAN`, `DB_CONNECTION_RETRY_COUNT` 등)은 계속 읽습니다(fallback). 둘 다 있으면 `MYSQL2_WIZARD_*`가 우선합니다.
+
 ```env
+# 접속 (DB_*)
 DB_HOST=localhost
 DB_USER=your_username
 DB_PASSWORD=your_password
-DB_DATABASE=your_database
+DB_NAME=your_database
 DB_PORT=3306
+DB_TYPE=mysql                 # mysql | mariadb
 DB_CONNECTION_LIMIT=10
 DB_QUEUE_LIMIT=0
 DB_WAIT_FOR_CONNECTIONS=true
 DB_MULTIPLE_STATEMENTS=false
-DB_DEBUG=false
-CASTED_BOOLEAN=true
-CASTED_DECIMAL_AS_NUMBER=true
-DB_CONNECTION_RETRY_COUNT=3
-DB_CONNECTION_RETRY_DELAY=1000
+DB_DEBUG=false                # mysql2 프로토콜 디버그
 DB_ENABLE_KEEP_ALIVE=true
+# DB_IDLE_TIMEOUT=60000       # (선택) idle connection 정리, ms — mysql2 idleTimeout
+# DB_MAX_IDLE=10              # (선택) 유지할 idle connection 수 — mysql2 maxIdle
+
+# 라이브러리 동작 (MYSQL2_WIZARD_*)
+MYSQL2_WIZARD_LOG_LEVEL=info              # silent | error | warn | info | debug
+MYSQL2_WIZARD_CASTED_BOOLEAN=true
+MYSQL2_WIZARD_CASTED_DECIMAL_AS_NUMBER=true
+MYSQL2_WIZARD_ENABLE_MARIADB_JSON=false
+MYSQL2_WIZARD_CONNECTION_RETRY_COUNT=3
+MYSQL2_WIZARD_CONNECTION_RETRY_DELAY=1000
+MYSQL2_WIZARD_CONVERT_DATE_TO_UTC=true
+MYSQL2_WIZARD_PING_ON_ACQUIRE=true
 ```
 
 또는 Prisma 스타일 URL 하나로 지정할 수 있습니다 (개별 `DB_*` 접속 변수보다 우선):
@@ -399,13 +414,35 @@ DB_ENABLE_KEEP_ALIVE=true
 DB_URL=mysql://user:password@host:3306/database?sslca=~/certs/ca.pem&sslaccept=strict&connect_timeout=10
 ```
 
-설명:
-- `CASTED_BOOLEAN`: TINYINT(1)을 boolean으로 캐스팅합니다.
-- `CASTED_DECIMAL_AS_NUMBER`(기본값: true): DECIMAL/NEWDECIMAL/FLOAT/DOUBLE 결과를 숫자 타입으로 캐스팅합니다. 정밀도가 중요한 금액/빅넘버 컬럼에서는 `false`로 비활성화를 권장합니다.
-- `DB_CONNECTION_RETRY_COUNT`(기본값: 3): "Too many connections" 또는 "Connection lost" 에러 발생 시 재시도 횟수입니다.
-- `DB_CONNECTION_RETRY_DELAY`(기본값: 1000): 재시도 간 대기 시간(밀리초)입니다. 지수 백오프 방식으로 증가합니다 (1초, 2초, 4초...).
-- `DB_ENABLE_KEEP_ALIVE`(기본값: true): Keep-alive 패킷으로 DB 연결을 유지합니다. DB의 `wait_timeout`보다 짧게 설정된 경우 연결이 끊기는 것을 방지합니다.
-- `DB_IDLE_TIMEOUT` / `DB_ENABLE_RECONNECT`: 2.1.0부터 읽지 않습니다. (이전 버전에서도 실제로 동작하지 않던 옵션이며, `reconnect`는 mysql2가 인식하지 않는 옵션이라 경고만 출력했습니다.) idle 정리가 필요하면 mysql2의 `idleTimeout`/`maxIdle` 풀 옵션을 사용하세요.
+설명 (`MYSQL2_WIZARD_*` — 괄호는 fallback으로 읽는 예전 이름):
+- `LOG_LEVEL`(기본값: info): 라이브러리 로그 상한. `error`는 SQL/연결 실패 요약만, `warn`은 재시도 알림 추가, `info`는 `printQuery` 쿼리 로그 추가, `debug`는 실행 SQL·접속 설정·pool 상태·stack까지. 운영 서버는 `warn` 또는 `error` 권장. (하위 호환: 미설정이고 `DEBUG=true`면 debug)
+- `CASTED_BOOLEAN`(`CASTED_BOOLEAN`): TINYINT(1)을 boolean으로 캐스팅합니다.
+- `CASTED_DECIMAL_AS_NUMBER`(`CASTED_DECIMAL_AS_NUMBER`, 기본값: true): DECIMAL/NEWDECIMAL/FLOAT/DOUBLE 결과를 숫자로 캐스팅합니다. 정밀도가 중요한 금액/빅넘버 컬럼에서는 `false` 권장.
+- `ENABLE_MARIADB_JSON`(`ENABLE_MARIADB_JSON`): MariaDB에서 JSON/LONGTEXT(BLOB) 컬럼을 JSON.parse 합니다.
+- `CONNECTION_RETRY_COUNT`(`DB_CONNECTION_RETRY_COUNT`, 기본값: 3): "Too many connections" / "Connection lost" 시 재시도 횟수.
+- `CONNECTION_RETRY_DELAY`(`DB_CONNECTION_RETRY_DELAY`, 기본값: 1000): 재시도 간격(ms). 지수 백오프 (1초, 2초, 4초...).
+- `CONVERT_DATE_TO_UTC`(`DB_CONVERT_DATE_TO_UTC`, 기본값: true): Date 컬럼 저장 시 UTC 변환.
+- `PING_ON_ACQUIRE`(기본값: true): pool에서 connection을 빌릴 때마다 `ping`으로 생존을 확인합니다. 쿼리마다 왕복 1회가 추가되므로 지연이 민감하면 `false`로 끄고 `DB_ENABLE_KEEP_ALIVE`/`DB_IDLE_TIMEOUT`에 맡기세요.
+- `DB_ENABLE_KEEP_ALIVE`(기본값: true): Keep-alive 패킷으로 연결을 유지합니다.
+- `DB_IDLE_TIMEOUT` / `DB_MAX_IDLE`: 설정했을 때만 mysql2 `idleTimeout`/`maxIdle`로 넘깁니다. 2.0.x의 `DB_IDLE_TIMEOUT`은 실제로 동작하지 않았고, `DB_ENABLE_RECONNECT`는 mysql2가 인식하지 않는 옵션이라 `Ignoring invalid configuration option passed to Connection: reconnect` 경고만 찍었습니다 — 2.1.0부터 제거되어 더 이상 읽지 않습니다.
+
+### 로깅 제어 (코드)
+
+env 대신 런타임에 바꾸거나 자체 로거(pino/winston 등)로 보낼 수 있습니다.
+
+```typescript
+import { configureLogging } from 'mysql2-wizard';
+
+configureLogging({
+  level: process.env.NODE_ENV === 'production' ? 'warn' : 'info',
+  logger: { error: (m) => myLogger.error(m), warn: (m) => myLogger.warn(m) }, // 일부만 넘기면 나머지는 console
+  prefix: '[db] ',
+});
+```
+
+### Next.js dev 서버에서 pool 재사용
+
+HMR로 모듈이 다시 평가돼도 pool은 `globalThis`에 설정 서명별로 캐시되어 재사용됩니다. reload마다 새 pool이 생겨 connection이 누적되거나 `Too many connections`가 나는 문제를 막습니다.
 
 ## 🔄 Custom Transaction Handling
 

@@ -29,12 +29,10 @@ export async function handler<T>(
 	} catch (error) {
 		// Deadlock / Lock wait timeout은 로그 생략. 그 외는 원본 에러를 유지해야 원인을 알 수 있다.
 		if (error instanceof Error && !isLockError(error)) {
-			logger.error(error.message);
+			const code = getErrorProperty(error, 'code');
+			logger.error(`${error.message}${code !== undefined ? ` (${String(code)})` : ''}`);
 			const sql = getErrorProperty(error, 'sql');
-			if (printSqlError && sql !== undefined) {
-				logger.error('SQL Error: ' + error);
-				logger.error('SQL Query: ' + String(sql));
-			}
+			if (printSqlError && sql !== undefined) logger.debug('SQL Query: ' + String(sql));
 		}
 		if (throwError) throw error;
 		return null as T;
