@@ -1,7 +1,6 @@
 import { CompareQuery, CompareValue, QueryOption } from "../../../interface";
 import mysql2 from 'mysql2/promise';
 import { convertToSnakeString } from "../../../utils";
-import { dbType } from "../../../config";
 
 // 조건 처리 헬퍼 함수 (중복 제거)
 const processCondition = <T>(
@@ -42,11 +41,11 @@ const processCondition = <T>(
 		if (value.operator === 'IN_JSON' && Array.isArray(value.value)) {
 			if (value.value.length === 0) return null; // 빈 배열이면 조건 제외
 			
+			const items: unknown[] = value.value;
 			// 모든 요소가 배열이면 각 하위 배열에 대해 JSON_CONTAINS로 OR 조건 구성 (합집합)
-			const isEveryArray = value.value.every(v => Array.isArray(v));
-			if (isEveryArray) {
+			if (items.every(v => Array.isArray(v))) {
 				const parts: string[] = [];
-				for (const sub of value.value as any[]) {
+				for (const sub of items) {
 					if (!Array.isArray(sub) || sub.length === 0) continue;
 					const ph = sub.map(() => '?').join(', ');
 					parts.push(`JSON_CONTAINS(${mysql2.format('??', [snakeKey])}, JSON_ARRAY(${ph}))`);
@@ -57,8 +56,7 @@ const processCondition = <T>(
 			}
 			
 			// 일부 또는 전부가 배열이 아닌 경우: 단일 JSON_ARRAY로 JSON_OVERLAPS
-			const hasNestedArray = (value.value as any[]).some(v => Array.isArray(v));
-			const flatValues = hasNestedArray ? (value.value as any[]).flat() : (value.value as any[]);
+			const flatValues = items.some(v => Array.isArray(v)) ? items.flat() : items;
 			const placeholders = flatValues.map(() => '?').join(', ');
 			values.push(...flatValues);
 			return `JSON_OVERLAPS(${mysql2.format('??', [snakeKey])}, JSON_ARRAY(${placeholders}))`;
@@ -83,7 +81,7 @@ const processCondition = <T>(
 				const pattern = value.pattern || 'contains';
 				const parts: string[] = [];
 				for (const [jsonKey, raw] of jsonEntries) {
-					let likeValue: string = String(raw as unknown as string);
+					let likeValue = String(raw);
 					switch (pattern) {
 						case 'starts':
 							likeValue = `${likeValue}%`;

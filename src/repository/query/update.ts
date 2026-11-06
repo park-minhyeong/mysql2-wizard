@@ -1,14 +1,23 @@
 import { ResultSetHeader } from "mysql2/promise";
 import { handler } from "../handler";
 import mysql2 from "mysql2/promise";
-import { CompareQuery, QueryOption, CompareValue } from "../../interface/Query";
+import { CompareQuery, QueryOption } from "../../interface/Query";
 import { Connection } from "../../interface/Repository";
 import where from "./condition/where";
 import set from "./condition/set";
 
-const queryString = <T>({ table }: QueryOption<T>) => ({
-  update: mysql2.format("UPDATE ?? SET ", [table]),
-});
+/** 단일 UPDATE 문과 바인딩 값 (SET 값 → WHERE 값 순). */
+export const buildUpdateQuery = <T>(
+	query: CompareQuery<T>,
+	obj: Partial<T>,
+	option: QueryOption<T>
+): { sql: string; params: unknown[] } => {
+	const { conditions, values } = where(query, option);
+	const row = option.toRow(obj);
+	const { setConditions, setValues } = set(row, option);
+	const sql = mysql2.format("UPDATE ?? SET ", [option.table]) + setConditions + " WHERE " + conditions;
+	return { sql, params: [...setValues, ...values] };
+};
 
 const update = async <T>(
   updates: Array<[CompareQuery<T>, Partial<T>]>,
@@ -18,30 +27,16 @@ const update = async <T>(
   const executeUpdate = async (conn: Connection): Promise<ResultSetHeader> => {
     let totalAffectedRows = 0;
     for (const [query, obj] of updates) {
-      const { conditions, values } = where(query, option);
-      const row = option.toRow(obj as T) as Partial<T>;
-      const { setConditions, setValues } = set(row, option);
-      const query_ =
-        queryString(option).update + setConditions + " WHERE " + conditions;
-      option.printQueryIfNeeded?.(query_);
-      const [result] = await conn.query<ResultSetHeader>(query_, [
-        ...setValues,
-        ...values,
-      ]);
+      const { sql, params } = buildUpdateQuery(query, obj, option);
+      option.printQueryIfNeeded?.(sql);
+      const [result] = await conn.query<ResultSetHeader>(sql, params);
       totalAffectedRows += result.affectedRows;
     }
-    return { affectedRows: totalAffectedRows } as ResultSetHeader;
+    return { affectedRows: totalAffectedRows } as ResultSetHeader; // 합산 결과만 의미 있음
   };
 
-  if (connection) {
-    // 트랜잭션 내에서 실행 (handler 없이 직접 connection 사용)
-    return executeUpdate(connection);
-  } else {
-    // 기존 동작: handler 사용 (하위 호환성)
-    return handler(async (connection) => {
-      return executeUpdate(connection);
-    });
-  }
+  // connection이 제공되면 트랜잭션 내에서 직접 실행, 없으면 handler 사용 (하위 호환성)
+  return connection ? executeUpdate(connection) : handler(executeUpdate);
 };
 
 export { update };

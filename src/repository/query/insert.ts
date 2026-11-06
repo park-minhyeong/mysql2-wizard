@@ -9,40 +9,30 @@ export interface ExtendedResultSetHeader extends ResultSetHeader {
 	insertIds?: number[];  // 모든 삽입된 ID들
 }
 
-const queryString = ({ table, columns }: { table: string, columns: readonly string[] }) => {
-	return {
-		insert: mysql2.format('INSERT INTO ?? (??) VALUES (?);', [table, columns]),
-		insertMany: mysql2.format('INSERT INTO ?? (??) VALUES ?;', [table, columns]),
-	};
-};
+const emptyResultSetHeader = (): ExtendedResultSetHeader => ({
+	affectedRows: 0,
+	insertId: 0,
+	insertIds: [],
+	fieldCount: 0,
+	info: '',
+	serverStatus: 0,
+	warningStatus: 0,
+	changedRows: 0,
+} as ExtendedResultSetHeader); // ResultSetHeader의 `constructor` 선언 때문에 리터럴로는 채울 수 없다
 
-const insert = async <T>(
-	objs: T[],
-	option: QueryOption<T>,
-	connection?: Connection
-): Promise<ExtendedResultSetHeader> => {
-	// 빈 배열 처리
-	if (objs.length === 0) {
-		const emptyResult = {
-			affectedRows: 0,
-			insertId: 0,
-			insertIds: [] as number[],
-			fieldCount: 0,
-			info: '',
-			serverStatus: 0,
-			warningStatus: 0,
-			changedRows: 0,
-		} as unknown as ExtendedResultSetHeader;
-		if (connection) {
-			return emptyResult;
-		} else {
-			return handler(async () => {
-				return emptyResult;
-			});
+/** AUTO_INCREMENT는 연속 할당이므로 insertId부터 affectedRows개를 insertIds로 복원한다. */
+const withInsertIds = (result: ResultSetHeader): ExtendedResultSetHeader => {
+	const insertIds: number[] = [];
+	if (result.insertId && result.affectedRows > 0) {
+		for (let i = 0; i < result.affectedRows; i++) {
+			insertIds.push(result.insertId + i);
 		}
 	}
+	return { ...result, insertIds };
+};
 
-	// SQL 빌드 로직 (connection과 무관)
+/** INSERT 문과 바인딩 값을 만든다. autoSet 컬럼이 비어 있으면 DEFAULT. */
+export const buildInsertQuery = <T>(objs: Partial<T>[], option: QueryOption<T>): { sql: string; params: unknown[] } => {
 	const rows = objs.map(obj => option.toRow(obj));
 	const columns = option.keys;
 	const values = rows.map(row =>
@@ -56,54 +46,32 @@ const insert = async <T>(
 		.map((value): string => (value === undefined ? 'DEFAULT' : '?'))
 		.join(', ');
 	const placeholders = values.map(() => `(${placeholder})`).join(', ');
-	const query = queryString({ table: option.table, columns }).insertMany.replace('?', placeholders);
-	option.printQueryIfNeeded?.(query);
-	const params = values.map(value => value.filter((v): v is unknown => v !== undefined)).flat();
+	const sql = mysql2.format('INSERT INTO ?? (??) VALUES ?;', [option.table, columns]).replace('?', placeholders);
+	const params = values.flatMap(value => value.filter((v): v is unknown => v !== undefined));
+	return { sql, params };
+};
 
-	// connection이 제공되면 직접 사용, 없으면 handler 사용
-	if (connection) {
-		// 트랜잭션 내에서 실행 (handler 없이 직접 connection 사용)
-		const [result] = await connection.query<ResultSetHeader>(query, params);
-
-		// insertIds 배열 생성
-		const insertIds: number[] = [];
-		if (result.insertId && result.affectedRows > 0) {
-			if (result.affectedRows === 1) {
-				insertIds.push(result.insertId);
-			} else {
-				for (let i = 0; i < result.affectedRows; i++) {
-					insertIds.push(result.insertId + i);
-				}
-			}
-		}
-
-		return {
-			...result,
-			insertIds
-		} as ExtendedResultSetHeader;
-	} else {
-		// 기존 동작: handler 사용 (하위 호환성)
-		return handler(async connection => {
-			const [result] = await connection.query<ResultSetHeader>(query, params);
-
-			// insertIds 배열 생성
-			const insertIds: number[] = [];
-			if (result.insertId && result.affectedRows > 0) {
-				if (result.affectedRows === 1) {
-					insertIds.push(result.insertId);
-				} else {
-					for (let i = 0; i < result.affectedRows; i++) {
-						insertIds.push(result.insertId + i);
-					}
-				}
-			}
-
-			return {
-				...result,
-				insertIds
-			} as ExtendedResultSetHeader;
-		});
+const insert = async <T>(
+	objs: Partial<T>[],
+	option: QueryOption<T>,
+	connection?: Connection
+): Promise<ExtendedResultSetHeader> => {
+	// 빈 배열 처리
+	if (objs.length === 0) {
+		const emptyResult = emptyResultSetHeader();
+		return connection ? emptyResult : handler(async () => emptyResult);
 	}
+
+	const { sql, params } = buildInsertQuery(objs, option);
+	option.printQueryIfNeeded?.(sql);
+
+	const executeInsert = async (conn: Connection): Promise<ExtendedResultSetHeader> => {
+		const [result] = await conn.query<ResultSetHeader>(sql, params);
+		return withInsertIds(result);
+	};
+
+	// connection이 제공되면 트랜잭션 내에서 직접 실행, 없으면 handler 사용 (하위 호환성)
+	return connection ? executeInsert(connection) : handler(executeInsert);
 };
 
 export default insert;

@@ -1,6 +1,6 @@
-import { CompareQuery, QueryOption, ToRowOption, SelectOption } from '../interface/Query';
+import { CompareQuery, QueryOption, ToRowOption, ColumnType } from '../interface/Query';
 import { logger } from '../log';
-import { select, selectOne, SelectQueryBuilder, SelectOneQueryBuilder } from './query/select';
+import { SelectQueryBuilder, SelectOneQueryBuilder } from './query/select';
 import insert from './query/insert';
 import { update } from './query/update';
 import { delete_ } from './query/delete';
@@ -8,39 +8,39 @@ import { Repository, RepositoryConfig, Connection } from '../interface/Repositor
 import { convertToSnakeStrings, toRow, toObject } from '../utils';
 
 const defaultAutoSetColumns = ['id', 'createdAt', 'updatedAt'] as const;
+
 function repository<T, AutoSet extends keyof T = never>(
-	{ table, keys, autoSetColumns, printQuery, relations }: RepositoryConfig<T>
+	{ table, keys, autoSetColumns, printQuery, relations, columnTypes }: RepositoryConfig<T>
 ): Repository<T, AutoSet> {
 	const printQueryIfNeeded = printQuery ? (query: string) => logger.log(`Query: ${query}`) : undefined;
 	const autoSetKeys = (autoSetColumns ?? defaultAutoSetColumns).map(key => String(key));
+	const snakeAutoSetKeys = convertToSnakeStrings(autoSetKeys);
 	const stringKeys = keys.map(key => String(key));
+	// ColumnTypes<T>는 keyof T 키이므로 문자열 맵으로 한 번만 정규화
+	const columnTypeMap = columnTypes as Record<string, ColumnType | undefined> | undefined;
 	const queryOption: QueryOption<T> = {
 		table,
 		keys: convertToSnakeStrings(stringKeys),
-		autoSetColumns: convertToSnakeStrings(autoSetKeys),
+		autoSetColumns: snakeAutoSetKeys,
 		printQuery,
 		printQueryIfNeeded,
-		toRow: (obj: T, option?: ToRowOption) => toRow(stringKeys, obj as Partial<T>, convertToSnakeStrings(autoSetKeys), option),
-		toObject: (row: Record<string, unknown>) => toObject([...stringKeys], row),
-		relations  // Enhanced Relations 지원 (새로 추가)
+		toRow: (obj: Partial<T>, option?: ToRowOption) => toRow(stringKeys, obj, snakeAutoSetKeys, option, columnTypeMap),
+		toObject: (row: Record<string, unknown>) => toObject<T>(stringKeys, row, columnTypeMap),
+		relations,
 	};
 	return {
 		// 체이닝 패턴: select(query, connection?).orderBy().limit().execute(connection?)
-		select: ((query?: CompareQuery<T>, connection?: Connection) => 
-			new SelectQueryBuilder(query, queryOption as unknown as QueryOption<T>, connection)
-		) as Repository<T, AutoSet>['select'],
-		selectOne: ((query: CompareQuery<T>, connection?: Connection) => 
-			new SelectOneQueryBuilder(query, queryOption as unknown as QueryOption<T>, connection)
-		) as Repository<T, AutoSet>['selectOne'],
-		insert: ((objs: Array<Omit<T, AutoSet>>, connection?: Connection) => 
-			insert(objs, queryOption as unknown as QueryOption<Omit<T, AutoSet>>, connection)
-		) as Repository<T, AutoSet>['insert'],
-		update: ((updates: Array<[CompareQuery<T>, Partial<Omit<T, AutoSet>>]>, connection?: Connection) => 
-			update(updates, queryOption as unknown as QueryOption<Omit<T, AutoSet>>, connection)
-		) as Repository<T, AutoSet>['update'],
-		delete: ((deletes: CompareQuery<T>[], connection?: Connection) => 
-			delete_(deletes, queryOption as unknown as QueryOption<T>, connection)
-		) as Repository<T, AutoSet>['delete'],
+		select: (query?: CompareQuery<T>, connection?: Connection) =>
+			new SelectQueryBuilder<T>(query, queryOption, connection),
+		selectOne: (query: CompareQuery<T>, connection?: Connection) =>
+			new SelectOneQueryBuilder<T>(query, queryOption, connection),
+		// Omit<T, AutoSet>은 구조적으로 Partial<T>의 부분집합이지만 TS가 제네릭에서 증명하지 못해 한 번 넓힌다
+		insert: (objs: Array<Omit<T, AutoSet>>, connection?: Connection) =>
+			insert<T>(objs as Partial<T>[], queryOption, connection),
+		update: (updates: Array<[CompareQuery<T>, Partial<Omit<T, AutoSet>>]>, connection?: Connection) =>
+			update<T>(updates as Array<[CompareQuery<T>, Partial<T>]>, queryOption, connection),
+		delete: (deletes: CompareQuery<T>[], connection?: Connection) =>
+			delete_<T>(deletes, queryOption, connection),
 	};
 }
 

@@ -1,6 +1,6 @@
 import { ResultSetHeader } from 'mysql2/promise';
 import mysql2 from 'mysql2/promise';
-import { CompareQuery, QueryOption,  JoinType, Relations,  Calculate  } from './Query';
+import { CompareQuery, JoinType, Relations, Calculate, ColumnTypes } from './Query';
 import { ExtendedResultSetHeader } from '../repository/query/insert';
 
 // Connection 타입 정의
@@ -11,7 +11,9 @@ export interface RepositoryConfig<T> {
 	keys: readonly string[];
 	autoSetColumns?: readonly (keyof T)[];
 	printQuery?: boolean;
-	relations?: Relations;  // Enhanced Relations 지원 (새로 추가)
+	relations?: Relations;  // Enhanced Relations 지원
+	/** 컬럼별 명시적 변환 타입. 미지정 컬럼은 기존 이름 기반 휴리스틱을 그대로 따른다. */
+	columnTypes?: ColumnTypes<T>;
 }
 
 export interface ISelectQueryBuilder<T> extends PromiseLike<T[]> {

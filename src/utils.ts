@@ -1,11 +1,12 @@
-import { ToRowOption } from "./interface";
+import { ColumnType, ToRowOption } from "./interface";
 
 const IS_FIELD_REGEX = /^is_/;
-const JSON_FIELD_REGEX = /(json|ask|data|config|settings|metadata|options|params|attributes|properties)/i; // JSON 필드 식별용 정규식
 const DATE_FIELD_REGEX = /(at|date|time)$/i; // 날짜 필드 식별용 정규식 (createdAt, updatedAt, startedAt 등)
 const DATETIME_REGEX = /^\d{4}-\d{2}-\d{2}(\s\d{2}:\d{2}:\d{2}(\.\d{1,3})?)?$/; // MySQL DATETIME 형식: YYYY-MM-DD 또는 YYYY-MM-DD HH:mm:ss[.SSS]
 const DATE_ONLY_REGEX = /^\d{4}-\d{2}-\d{2}$/; // 날짜만 있는 형식: YYYY-MM-DD
 const ISO8601_REGEX = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,3})?(Z|[+-]\d{2}:\d{2})?$/; // ISO 8601 형식: YYYY-MM-DDTHH:mm:ss[.SSS][Z|±HH:mm]
+
+type ColumnTypeMap = Record<string, ColumnType | undefined>;
 
 // JSON 문자열인지 확인하는 함수
 const isJsonString = (str: string): boolean => {
@@ -43,6 +44,20 @@ const isJsonString = (str: string): boolean => {
     }
   }
   return false;
+};
+
+/** JSON 문자열(이중 이스케이프 포함)을 파싱한다. 실패하면 원본을 돌려준다. */
+const parseJsonLoose = (value: string): unknown => {
+  try {
+    const trimmed = value.trim();
+    if (trimmed.startsWith('"') && trimmed.endsWith('"')) {
+      const unescaped: unknown = JSON.parse(trimmed);
+      return typeof unescaped === 'string' ? JSON.parse(unescaped) : unescaped;
+    }
+    return JSON.parse(value);
+  } catch {
+    return value;
+  }
 };
 
 // Date 객체를 MySQL DATETIME 형식 문자열로 변환 (UTC 기준)
@@ -124,128 +139,124 @@ const convertUTCStringToDate = (utcString: string): Date | string => {
 	return utcString;
 };
 
-const toObject = <T>(keys: string[], row: Record<string, any>): T => {
+/** DB 값 → 객체 값 (명시적 columnType) */
+const fromDbExplicit = (value: unknown, type: ColumnType): unknown => {
+	switch (type) {
+		case 'boolean':
+			return toBoolean(value);
+		case 'date':
+			return typeof value === 'string' ? convertUTCStringToDate(value) : value;
+		case 'json':
+			return typeof value === 'string' ? parseJsonLoose(value) : value;
+		case 'raw':
+			return value;
+	}
+};
+
+/** DB 값 → 객체 값 (이름 기반 휴리스틱, 기본 동작) */
+const fromDbHeuristic = (key: string, snakeKey: string, value: unknown): unknown => {
+	if (IS_FIELD_REGEX.test(snakeKey)) {
+		return toBoolean(value);
+	}
+	if (typeof value !== 'string') {
+		return value;
+	}
+	// 날짜 필드인 경우 UTC 문자열을 Date 객체로 변환
+	if (DATE_FIELD_REGEX.test(key) || DATE_FIELD_REGEX.test(snakeKey)) {
+		const converted = convertUTCStringToDate(value);
+		if (converted instanceof Date) return converted;
+		return isJsonString(converted) ? parseJsonLoose(converted) : converted;
+	}
+	// 모든 문자열 필드에 대해 JSON 파싱 시도
+	return isJsonString(value) ? parseJsonLoose(value) : value;
+};
+
+const toObject = <T>(keys: string[], row: Record<string, unknown>, columnTypes?: ColumnTypeMap): T => {
 	const snakeKeys = convertToSnakeStrings([...keys]);
-	const result = {} as Record<string, unknown>;
+	const result: Record<string, unknown> = {};
 	keys.forEach((key, i) => {
 		const snakeKey = snakeKeys[i];
 		const value = row[snakeKey];
-		
-		if(IS_FIELD_REGEX.test(snakeKey)) {
-			result[key] = toBoolean(value);
-		} else if (typeof value === 'string' && value !== null && value !== undefined) {
-			// 날짜 필드인 경우 UTC 문자열을 Date 객체로 변환
-			if (DATE_FIELD_REGEX.test(key) || DATE_FIELD_REGEX.test(snakeKey)) {
-				const converted = convertUTCStringToDate(value);
-				if (converted instanceof Date) {
-					// Date 객체 반환 (UTC 값 그대로 유지)
-					result[key] = converted;
-				} else if (isJsonString(converted)) {
-					// JSON 문자열인 경우 JSON 파싱 시도
-					try {
-						const trimmed = converted.trim();
-						if (trimmed.startsWith('"') && trimmed.endsWith('"')) {
-							const unescaped = JSON.parse(trimmed);
-							if (typeof unescaped === 'string') {
-								result[key] = JSON.parse(unescaped);
-							} else {
-								result[key] = unescaped;
-							}
-						} else {
-							result[key] = JSON.parse(converted);
-						}
-					} catch (error) {
-						result[key] = converted;
-					}
-				} else {
-					result[key] = converted;
-				}
-			} else if (isJsonString(value)) {
-				// JSON 문자열인 경우 JSON 파싱 시도
-				// 모든 문자열 필드에 대해 JSON 파싱 시도
-				try {
-					const trimmed = value.trim();
-					// 이스케이프된 JSON 문자열 처리
-					if (trimmed.startsWith('"') && trimmed.endsWith('"')) {
-						const unescaped = JSON.parse(trimmed);
-						if (typeof unescaped === 'string') {
-							result[key] = JSON.parse(unescaped);
-						} else {
-							result[key] = unescaped;
-						}
-					} else {
-						// 일반 JSON 파싱
-						result[key] = JSON.parse(value);
-					}
-				} catch (error) {
-					result[key] = value;
-				}
-			} else {
-				result[key] = value;
-			}
-		} else {
-			result[key] = value;
-		}
+		const explicit = columnTypes?.[key];
+		result[key] = explicit ? fromDbExplicit(value, explicit) : fromDbHeuristic(key, snakeKey, value);
 	});
 	return result as T;
 };
 
-const toRow = <T>(keys: readonly string[], obj: T, autoSetKeys: readonly string[],option?: ToRowOption): Record<string, any> => {
+/** 객체 값 → DB 값 (명시적 columnType). undefined는 그대로 둔다(INSERT DEFAULT / UPDATE 제외용). */
+const toDbExplicit = (value: unknown, type: ColumnType): unknown => {
+	if (value === undefined) return undefined;
+	switch (type) {
+		case 'boolean':
+			return toDbBoolean(value);
+		case 'date':
+			if (value instanceof Date) return formatDateForMySQLUTC(value);
+			return typeof value === 'string' ? convertStringDateToUTC(value) : value;
+		case 'json':
+			return value !== null && typeof value === 'object' ? JSON.stringify(value) : value;
+		case 'raw':
+			return value;
+	}
+};
+
+/** 객체 값 → DB 값 (이름 기반 휴리스틱, 기본 동작). is_ 접두사 boolean 변환은 snake 변환 단계에서 처리. */
+const toDbHeuristic = (key: string, value: unknown): unknown => {
+	// Date 객체 처리: UTC로 변환하여 MySQL DATETIME 형식 문자열로 저장
+	if (value instanceof Date) {
+		return formatDateForMySQLUTC(value);
+	}
+	// 문자열 날짜 처리: 로컬 타임존으로 해석 후 UTC로 변환하여 저장
+	if (typeof value === 'string') {
+		const isDateField = DATE_FIELD_REGEX.test(key) || DATE_FIELD_REGEX.test(convertToSnakeString(key));
+		const isDateString = DATETIME_REGEX.test(value.trim()) || DATE_ONLY_REGEX.test(value.trim());
+		return isDateField || isDateString ? convertStringDateToUTC(value) : value;
+	}
+	// JSON 필드 처리: 객체나 배열을 문자열로 변환
+	if (value !== null && value !== undefined && typeof value === 'object') {
+		return JSON.stringify(value);
+	}
+	return value;
+};
+
+const toRow = <T>(
+	keys: readonly string[],
+	obj: T,
+	autoSetKeys: readonly string[],
+	option?: ToRowOption,
+	columnTypes?: ColumnTypeMap
+): Record<string, unknown> => {
 	const isAutoSet = option?.isAutoSet ?? true;
 	const row: Record<string, unknown> = {};
 	keys.forEach((key) => {
 		if (isAutoSet && autoSetKeys.includes(String(key))) {
-			row[[key][0]] = undefined;
-		} else {
-			const value = obj[key as keyof typeof obj];
-			// Date 객체 처리: UTC로 변환하여 MySQL DATETIME 형식 문자열로 저장
-			if (value instanceof Date) {
-				row[[key][0]] = formatDateForMySQLUTC(value);
-			}
-			// 문자열 날짜 처리: 로컬 타임존으로 해석 후 UTC로 변환하여 저장
-			else if (typeof value === 'string' && value !== null && value !== undefined) {
-				// 날짜 필드이거나 날짜 형식 문자열인 경우 UTC로 변환
-				const isDateField = DATE_FIELD_REGEX.test(key) || DATE_FIELD_REGEX.test(convertToSnakeString(String(key)));
-				const isDateString = DATETIME_REGEX.test(value.trim()) || DATE_ONLY_REGEX.test(value.trim());
-				
-				if (isDateField || isDateString) {
-					row[[key][0]] = convertStringDateToUTC(value);
-				} else {
-					row[[key][0]] = value;
-				}
-			}
-			// JSON 필드 처리: 객체나 배열을 문자열로 변환 (Date 제외)
-			else if (value !== null && value !== undefined && typeof value === 'object') {
-				row[[key][0]] = JSON.stringify(value);
-			} else {
-				row[[key][0]] = value;
-			}
+			row[key] = undefined;
+			return;
 		}
+		const value: unknown = obj[key as keyof T];
+		const explicit = columnTypes?.[key];
+		row[key] = explicit ? toDbExplicit(value, explicit) : toDbHeuristic(key, value);
 	});
-	const snakeRow = Object.entries(row as Record<string, unknown>).reduce((acc, [key, value]) => {
+	return Object.entries(row).reduce<Record<string, unknown>>((acc, [key, value]) => {
 		const snakeKey = convertToSnakeString(key);
-		// is_ 접두사가 있는 필드를 DB boolean(1/0)으로 변환
-		if (IS_FIELD_REGEX.test(snakeKey)) {
+		// 명시적 타입이 없는 is_ 접두사 필드만 DB boolean(1/0)으로 변환
+		if (!columnTypes?.[key] && IS_FIELD_REGEX.test(snakeKey)) {
 			// undefined 값인 is_ 필드는 제외 (UPDATE 시에만 해당)
-			if (value === undefined) {
-				return acc; // undefined인 is_ 필드는 결과에 포함하지 않음
-			}
+			if (value === undefined) return acc;
 			acc[snakeKey] = toDbBoolean(value);
 		} else {
 			acc[snakeKey] = value;
 		}
 		return acc;
-	}, {} as Record<string, unknown>);
-	return snakeRow;
+	}, {});
 };
 
-const toBoolean = (value: any): boolean => {
+const toBoolean = (value: unknown): boolean => {
 	if (typeof value === 'boolean') return value;
 	if (value === 1 || value === '1') return true;
 	if (value === 0 || value === '0') return false;
 	return Boolean(value);
 };
-const toDbBoolean = (value: any): 1 | 0 => {
+const toDbBoolean = (value: unknown): 1 | 0 => {
 	if (typeof value === 'boolean') return value ? 1 : 0;
 	if (value === 1 || value === '1') return 1;
 	if (value === 0 || value === '0') return 0;
@@ -275,5 +286,4 @@ export const convertToSnakeString = <T extends string>(input: T) =>
 	input.replace(/([a-z])([A-Z])/g, "$1_$2").toLowerCase() as ToSnakeCase<T>;
 export const convertToSnakeStrings = <T extends string>(strings: ReadonlyArray<T>): string[] =>
 	strings.map(convertToSnakeString);
-export const toSnakeString = <T extends string>(input: T) =>
-	input.replace(/([a-z])([A-Z])/g, "$1_$2").toLowerCase() as ToSnakeCase<T>;
+export const toSnakeString = convertToSnakeString;

@@ -7,6 +7,16 @@ export type ColumnMapping<T> = {
 
 export type AutoSetColumns<T> = keyof T;
 
+/**
+ * 컬럼별 명시적 변환 타입. 지정하면 이름 기반 휴리스틱(is_ 접두사, *At/*Date, JSON 문자열 감지) 대신 이 규칙을 쓴다.
+ * - json: 쓰기 시 객체 → JSON.stringify, 읽기 시 문자열 → JSON.parse
+ * - date: 쓰기 시 Date/문자열 → UTC DATETIME 문자열, 읽기 시 문자열 → Date(UTC)
+ * - boolean: 쓰기 시 → 1/0, 읽기 시 → boolean
+ * - raw: 어떤 변환도 하지 않음
+ */
+export type ColumnType = 'json' | 'date' | 'boolean' | 'raw';
+export type ColumnTypes<T> = Partial<Record<keyof T, ColumnType>>;
+
 // 비교 연산자 타입
 export type CompareOperator = '=' | '!=' | '>' | '<' | '>=' | '<=' | 'LIKE' | 'IN' | 'IN_JSON';
 
@@ -58,8 +68,8 @@ export interface CalculateMax<A extends string, T> extends CalculateRaw<A, T> {
 export type Calculate<A extends string, T> = CalculateSum<A, T> | CalculateAvg<A, T> | CalculateMin<A, T> | CalculateMax<A, T> | CalculateCount<A, T>;
 
 
-export type InferCalculateResult<T extends Calculate<string, T>[]> = {
-	[K in T[number]['alias']]: number;
+export type InferCalculateResult<TCalculates extends ReadonlyArray<{ alias: string }>> = {
+	[K in TCalculates[number]['alias']]: number;
 };
 
 
@@ -80,7 +90,8 @@ export interface Relation {
 	foreignKey: string;
 	type: RelationType;
 	joinType?: JoinType;  // 기본값: INNER
-	keys?: readonly string[];  // 조인된 테이블에서 선택할 컬럼들 (새로 추가)
+	keys?: readonly string[];  // 조인된 테이블에서 선택할 컬럼들
+	columnTypes?: Record<string, ColumnType>;  // 조인 테이블 컬럼의 명시적 변환 타입 (camelCase 키)
 }
 
 export type Relations = Record<string, Relation>;
@@ -132,9 +143,9 @@ interface QueryOption<T> {
 	autoSetColumns?: string[];
 	printQuery?: boolean;
 	printQueryIfNeeded?: (query: string) => void;
-	toRow: (obj: T, option?: ToRowOption) => Record<string, unknown>;
+	toRow: (obj: Partial<T>, option?: ToRowOption) => Record<string, unknown>;
 	toObject: (row: Record<string, unknown>) => T;
-	relations?: Relations;  // Enhanced Relations 지원 (새로 추가)
+	relations?: Relations;  // Enhanced Relations 지원
 }
 
 // 쿼리 문자열 생성을 위한 인터페이스

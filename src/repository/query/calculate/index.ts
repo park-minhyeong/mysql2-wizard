@@ -8,9 +8,54 @@ import buildCountQuery from './count';
 import buildAvgQuery from './avg';
 import buildMinQuery from './min';
 import buildMaxQuery from './max';
+import { AggregateQuery } from './aggregate';
+
+const buildCalculatePart = <T>(item: Calculate<string, T>, query: CompareQuery<T> | undefined, option: QueryOption<T>): AggregateQuery => {
+	const alias = item.alias;
+	switch (item.fn) {
+		case 'SUM':
+			return buildSumQuery<T>({ column: item.column === undefined ? undefined : String(item.column), alias, case: item.case }, option.table, query, option);
+		case 'COUNT':
+			return buildCountQuery<T>({ column: item.column === undefined ? undefined : String(item.column), alias, case: item.case }, option.table, query, option);
+		case 'AVG':
+			return buildAvgQuery<T>({ column: String(item.column || 'id'), alias, case: item.case }, option.table, query, option);
+		case 'MIN':
+			return buildMinQuery<T>({ column: String(item.column || 'id'), alias, case: item.case }, option.table, query, option);
+		case 'MAX':
+			return buildMaxQuery<T>({ column: String(item.column || 'id'), alias, case: item.case }, option.table, query, option);
+		default: {
+			const unknown: never = item;
+			throw new Error(`Unsupported calculate function: ${(unknown as Calculate<string, T>).fn}`);
+		}
+	}
+};
+
+/** `SELECT <aggregates> FROM table [WHERE ...]` 와 바인딩 값 (집계 CASE 값 → WHERE 값 순). */
+export const buildCalculateQuery = <T>(
+	query: CompareQuery<T> | undefined,
+	option: QueryOption<T>,
+	calculates: ReadonlyArray<Calculate<string, T>>,
+	selectOptions?: SelectOption<T>
+): { sql: string; values: unknown[] } => {
+	const values: unknown[] = [];
+	const parts: string[] = [];
+	for (const item of calculates) {
+		const built = buildCalculatePart(item, query, option);
+		parts.push(built.query);
+		values.push(...built.values);
+	}
+
+	let sql = `SELECT ${parts.join(', ')} FROM ${mysql2.format('??', [option.table])}`;
+	const { conditions, values: whereValues } = where(query ?? {}, option, selectOptions?.orConditions);
+	if (conditions.trim()) {
+		sql += ` WHERE ${conditions}`;
+		values.push(...whereValues);
+	}
+	return { sql, values };
+};
 
 // 오버로드 시그니처들
-function calculate<T, TCalculates extends Calculate<string, any>[]>(
+function calculate<T, TCalculates extends Calculate<string, T>[]>(
 	query: CompareQuery<T> | undefined,
 	option: QueryOption<T>,
 	calculates: TCalculates,
@@ -19,145 +64,32 @@ function calculate<T, TCalculates extends Calculate<string, any>[]>(
 function calculate<T, C extends Record<string, number>>(
 	query: CompareQuery<T> | undefined,
 	option: QueryOption<T>,
-	calculates: Calculate<string & keyof C, any>[],
+	calculates: Calculate<string & keyof C, T>[],
 	selectOptions?: SelectOption<T>
 ): Promise<C>;
 
 // 실제 구현
-function calculate<T, C extends Record<string, number> | Calculate<string, any>[]>(
+function calculate<T>(
 	query: CompareQuery<T> | undefined,
 	option: QueryOption<T>,
-	calculates: C,
+	calculates: Calculate<string, T>[],
 	selectOptions?: SelectOption<T>
-): Promise<any> {
+): Promise<Record<string, number>> {
 	return handler(async connection => {
-	let query_: string;
-	let values: unknown[] = [];
+		const { sql, values } = buildCalculateQuery(query, option, calculates, selectOptions);
+		option.printQueryIfNeeded?.(sql);
+		const [rows] = await connection.query<RowDataPacket[]>(sql, values);
 
-	// SELECT 절 구성 - calculate 함수들만
-	const calculateParts: string[] = [];
-	
-	for (const calculateItem of calculates as any) {
-		let calculateQuery: string;
-		let calculateValues: unknown[] = [];
-
-		switch (calculateItem.fn) {
-			case 'SUM':
-				const sumResult = buildSumQuery<T>(
-					{ 
-						column: calculateItem.column, 
-						alias: calculateItem.alias, 
-						case: calculateItem.case
-					},
-					option.table,
-					query,
-					option
-				);
-				calculateQuery = sumResult.query;
-				calculateValues = sumResult.values;
-				break;
-
-			case 'COUNT':
-				const countResult = buildCountQuery<T>(
-					{ 
-						column: calculateItem.column, 
-						alias: calculateItem.alias, 
-						case: calculateItem.case
-					},
-					option.table,
-					query,
-					option
-				);
-				calculateQuery = countResult.query;
-				calculateValues = countResult.values;
-				break;
-
-			case 'AVG':
-				const avgResult = buildAvgQuery<T>(
-					{ 
-						column: calculateItem.column || 'id', 
-						alias: calculateItem.alias, 
-						case: calculateItem.case
-					},
-					option.table,
-					query,
-					option
-				);
-				calculateQuery = avgResult.query;
-				calculateValues = avgResult.values;
-				break;
-
-			case 'MIN':
-				const minResult = buildMinQuery<T>(
-					{ 
-						column: calculateItem.column || 'id', 
-						alias: calculateItem.alias, 
-						case: calculateItem.case
-					},
-					option.table,
-					query,
-					option
-				);
-				calculateQuery = minResult.query;
-				calculateValues = minResult.values;
-				break;
-
-			case 'MAX':
-				const maxResult = buildMaxQuery<T>(
-					{ 
-						column: calculateItem.column || 'id', 
-						alias: calculateItem.alias, 
-						case: calculateItem.case
-					},
-					option.table,
-					query,
-					option
-				);
-				calculateQuery = maxResult.query;
-				calculateValues = maxResult.values;
-				break;
-
-			default:
-				throw new Error(`Unsupported calculate function: ${calculateItem.fn}`);
+		// 결과를 alias → number 로 변환 (NULL은 0)
+		const result: Record<string, number> = {};
+		if (rows.length > 0) {
+			const row = rows[0];
+			for (const item of calculates) {
+				const value: unknown = row[item.alias];
+				result[item.alias] = value !== null ? Number(value) : 0;
+			}
 		}
-
-		calculateParts.push(calculateQuery);
-		values.push(...calculateValues);
-	}
-
-	// 기본 쿼리 구성
-	query_ = `SELECT ${calculateParts.join(', ')} FROM ${mysql2.format('??', [option.table])}`;
-
-	// WHERE 절 추가 (메인 조건 + OR 조건)
-	if (query && Object.keys(query).length > 0) {
-		const { conditions, values: whereValues } = where(query, option, selectOptions?.orConditions);
-		if (conditions.trim()) {
-			query_ += ` WHERE ${conditions}`;
-			values.push(...whereValues);
-		}
-	} else if (selectOptions?.orConditions && selectOptions.orConditions.length > 0) {
-		// 메인 쿼리가 없지만 OR 조건만 있는 경우
-		const { conditions, values: whereValues } = where({} as CompareQuery<T>, option, selectOptions.orConditions);
-		if (conditions.trim()) {
-			query_ += ` WHERE ${conditions}`;
-			values.push(...whereValues);
-		}
-	}
-
-	option.printQueryIfNeeded?.(query_);
-	const [rows] = await connection.query<RowDataPacket[]>(query_, values);
-	
-	// 결과를 지정된 타입으로 변환
-	const result = {} as C;
-	if (rows.length > 0) {
-		const row = rows[0];
-		for (const calculateItem of calculates as any) {
-			const value = row[calculateItem.alias as string];
-			(result as any)[calculateItem.alias] = value !== null ? Number(value) : 0;
-		}
-	}
-	
-	return result;
+		return result;
 	});
 }
 

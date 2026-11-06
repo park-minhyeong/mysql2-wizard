@@ -12,8 +12,7 @@ export function transfers<
 		for (let i = 0; i < columns.length; i++) {
 			const key = keys[i];
 			const column = columns[i];
-			const value = row[column];
-			obj[key] = value as unknown as O[K]; 
+			obj[key] = row[column]; // RowDataPacket 인덱스 값은 any
 		}
 		return obj;
 	};
