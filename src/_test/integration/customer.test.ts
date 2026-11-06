@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import consultAdminService from './customer';
+import consultAdminService from '../service/customer';
 
 describe('customer.ts 실제 서비스 테스트', () => {
     beforeEach(async () => {

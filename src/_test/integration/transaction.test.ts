@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, beforeAll } from 'vitest';
-import { repository } from '../repository';
-import { handler } from '../config';
-import { Test, testKeys } from './interface/Test';
+import { repository } from '../../repository';
+import { handler } from '../../config';
+import { Test, testKeys } from '../interface/Test';
 
 // 테스트용 repository 생성
 const testRepo = repository<Test, 'id'>({

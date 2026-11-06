@@ -241,6 +241,34 @@ console.log(retrieved.ask.a); // 'asdf'
 // MariaDB: "{\"a\":\"asdf\"}"
 ```
 
+### Explicit Column Types (`columnTypes`)
+
+기본 변환은 **이름 기반 휴리스틱**입니다: `is_*` 컬럼 → boolean, `*At` / `*Date` / `*Time` → Date, JSON처럼 생긴 문자열 → `JSON.parse`.
+휴리스틱이 맞지 않는 컬럼(예: `isPublished`가 `'Y'/'N'` 문자열, `format`처럼 `at`으로 끝나지만 날짜가 아닌 컬럼)은 `columnTypes`로 명시하세요. 지정한 컬럼만 휴리스틱을 건너뛰고, 나머지는 기존 동작을 그대로 유지합니다.
+
+```typescript
+const docRepo = repository<Doc, 'id'>({
+  table: 'docs',
+  keys: ['id', 'isPublished', 'format', 'payload', 'expiresOn', 'flag'],
+  columnTypes: {
+    isPublished: 'raw',   // 변환 없음 ('Y'/'N' 그대로)
+    format: 'raw',        // 'at'으로 끝나지만 날짜가 아님
+    payload: 'json',      // 쓰기: JSON.stringify / 읽기: JSON.parse
+    expiresOn: 'date',    // 쓰기: UTC DATETIME 문자열 / 읽기: Date (휴리스틱에 안 걸리는 이름)
+    flag: 'boolean',      // 쓰기: 1/0 / 읽기: boolean (is_ 접두사 없음)
+  },
+});
+```
+
+| type | write (`insert`/`update`) | read (`select`) |
+|------|---------------------------|-----------------|
+| `json` | 객체/배열 → `JSON.stringify` | 문자열 → `JSON.parse` (실패 시 원본) |
+| `date` | `Date`/ISO 문자열 → `YYYY-MM-DD HH:mm:ss` (UTC), `YYYY-MM-DD`는 그대로 | 문자열 → `Date` (UTC) |
+| `boolean` | → `1`/`0` (undefined는 SET에서 제외) | → `boolean` |
+| `raw` | 그대로 | 그대로 |
+
+`relations[*].columnTypes`로 조인 테이블 컬럼에도 같은 규칙을 적용할 수 있습니다.
+
 ### Relations (Enhanced)
 
 ```typescript
@@ -363,8 +391,12 @@ CASTED_DECIMAL_AS_NUMBER=true
 DB_CONNECTION_RETRY_COUNT=3
 DB_CONNECTION_RETRY_DELAY=1000
 DB_ENABLE_KEEP_ALIVE=true
-DB_IDLE_TIMEOUT=60000
-DB_ENABLE_RECONNECT=true
+```
+
+또는 Prisma 스타일 URL 하나로 지정할 수 있습니다 (개별 `DB_*` 접속 변수보다 우선):
+
+```env
+DB_URL=mysql://user:password@host:3306/database?sslca=~/certs/ca.pem&sslaccept=strict&connect_timeout=10
 ```
 
 설명:
@@ -373,8 +405,7 @@ DB_ENABLE_RECONNECT=true
 - `DB_CONNECTION_RETRY_COUNT`(기본값: 3): "Too many connections" 또는 "Connection lost" 에러 발생 시 재시도 횟수입니다.
 - `DB_CONNECTION_RETRY_DELAY`(기본값: 1000): 재시도 간 대기 시간(밀리초)입니다. 지수 백오프 방식으로 증가합니다 (1초, 2초, 4초...).
 - `DB_ENABLE_KEEP_ALIVE`(기본값: true): Keep-alive 패킷으로 DB 연결을 유지합니다. DB의 `wait_timeout`보다 짧게 설정된 경우 연결이 끊기는 것을 방지합니다.
-- `DB_IDLE_TIMEOUT`(기본값: 60000): Pool에서 idle 커넥션을 정리하는 시간(밀리초)입니다. DB의 `wait_timeout`보다 짧게 설정하는 것을 권장합니다 (예: DB가 300초면 60초).
-- `DB_ENABLE_RECONNECT`(기본값: true): 연결이 끊겼을 때 자동으로 재연결을 시도합니다.
+- `DB_IDLE_TIMEOUT` / `DB_ENABLE_RECONNECT`: 2.1.0부터 읽지 않습니다. (이전 버전에서도 실제로 동작하지 않던 옵션이며, `reconnect`는 mysql2가 인식하지 않는 옵션이라 경고만 출력했습니다.) idle 정리가 필요하면 mysql2의 `idleTimeout`/`maxIdle` 풀 옵션을 사용하세요.
 
 ## 🔄 Custom Transaction Handling
 
@@ -394,6 +425,30 @@ await handler(async (connection) => {
   useTransaction: true,
   throwError: true,
   printSqlError: true
+});
+```
+
+#### `handler` 동작 요약
+
+`handler`는 pool에서 connection을 얻어 (옵션에 따라) 트랜잭션을 열고, 끝나면 항상 반환(release)합니다.
+
+| 옵션 | 기본값 | 설명 |
+|------|--------|------|
+| `useTransaction` | `true` | `BEGIN` → callback → `COMMIT`; 에러 시 `ROLLBACK` |
+| `rollbackIfError` | `true` | `false`면 에러가 나도 롤백하지 않음 |
+| `throwError` | `true` | `false`면 에러 대신 `null` 반환 |
+| `printSqlError` | `true` | mysql2 에러의 SQL / sqlMessage / code 로그 |
+
+- connection을 얻지 못하면 `null`을 반환합니다.
+- mysql2 에러는 `DbError`(`code`, `errno`, `sql`, `sqlMessage` 포함)로 감싸서 던집니다.
+- `repo.select/insert/update/delete`에 `connection`을 넘기면 같은 트랜잭션 안에서 실행됩니다. connection을 넘기지 않으면 각 호출이 pool에서 connection을 얻어 **트랜잭션 없이** 실행되고 원본 mysql2 에러를 그대로 던집니다.
+
+```typescript
+await handler(async (connection) => {
+  const [user] = await userRepo.select({ id: 1 }, connection);            // 같은 트랜잭션
+  await userRepo.update([[{ id: 1 }, { score: user.score + 10 }]], connection);
+  await logRepo.insert([{ userId: 1, action: 'bonus' }], connection);
+  // 체이닝도 가능: userRepo.select({ isActive: true }).orderBy([...]).execute(connection)
 });
 ```
 
@@ -460,12 +515,19 @@ npm install
 # Run development server with hot-reload
 npm run dev
 
+# Type-check (including tests)
+npm run typecheck
+
+# Tests: unit (no DB) / integration (needs .env DB) — see TEST_GUIDE.md
+npm run test:unit
+npm run test:integration
+npm test
+
 # Build the project
 npm run build
 
-# Build and publish
-npm run build-publish
-npm run upload
+# Build, bump patch version and publish
+npm run deploy
 ```
 
 ## 📊 Performance Features

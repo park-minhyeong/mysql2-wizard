@@ -1,31 +1,35 @@
 {
 	"name": "mysql2-wizard",
-	"description": "no repository in server",
+	"description": "Type-safe repository and chainable query builder on top of mysql2 (camelCase/snake_case mapping, JSON/Date handling, transactions)",
 	"version": "2.0.61",
 	"main": "index.js",
+	"types": "index.d.ts",
 	"scripts": {
 		"dev": "nodemon --experimental-specifier-resolution=node src/_test/app/index.ts",
 		"build": "rm -rf dist && tsc -p tsconfig.build.json --noEmit false",
+		"typecheck": "tsc -p tsconfig.json --noEmit",
 		"build-publish": "npm run build && npm version patch && node setupPackage.js",
 		"deploy": "npm run build-publish && cd dist && npm publish && git push && git push --tags",
 		"test": "vitest run",
+		"test:unit": "vitest run src/_test/unit",
+		"test:integration": "vitest run src/_test/integration",
 		"test:watch": "vitest",
 		"test:coverage": "vitest run --coverage"
 	},
 	"author": "park-minhyeong",
 	"license": "MIT",
 	"dependencies": {
-		"mysql2": "^3.14.1",
-		"nodemon": "^3.1.10",
-		"tspec": "^0.1.116"
+		"mysql2": "^3.14.1"
 	},
 	"devDependencies": {
+		"@edu-tosel/interface": "https://resource.tosel.co.kr/packages/interface/1.0.466",
 		"@types/express": "^4.17.21",
 		"@types/node": "^22.10.7",
 		"@vitest/coverage-v8": "^2.1.9",
 		"dotenv": "^16.5.0",
 		"express": "^4.18.2",
 		"form-data": "^4.0.0",
+		"nodemon": "^3.1.10",
 		"tar": "^7.1.0",
 		"ts-node": "^10.9.2",
 		"type-wizard": "^1.0.17",

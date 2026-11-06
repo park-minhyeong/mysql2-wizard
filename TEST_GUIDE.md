@@ -1,104 +1,68 @@
-# customer.ts 테스트 가이드
+# 테스트 가이드
 
-## 테스트 실행 방법
+테스트는 두 종류로 나뉜다.
 
-### 1. 전체 테스트 실행
+| 종류 | 위치 | DB 필요 | 실행 |
+|------|------|---------|------|
+| 단위 테스트 | `src/_test/unit/` | 없음 (mock connection으로 SQL/바인딩 검증) | `npm run test:unit` |
+| 통합 테스트 | `src/_test/integration/` | 필요 (`.env`) | `npm run test:integration` |
+
+`npm test`는 둘 다 실행한다.
+
+## 단위 테스트
+
+DB 없이 다음을 검증한다.
+
+- `where.test.ts` — WHERE 절 생성 (IN / LIKE / IN_JSON / null / OR)
+- `clauses.test.ts` — ORDER BY, LIMIT/OFFSET, SELECT 컬럼, JOIN, relation → JOIN
+- `utils.test.ts` — `toRow` / `toObject` 휴리스틱 변환 (snake_case, boolean, JSON, Date)
+- `column-types.test.ts` — `columnTypes` 명시적 변환
+- `repository-sql.test.ts` — `repository()`가 만드는 실제 SELECT / INSERT / UPDATE / DELETE 문과 relation 매핑
+- `calculate*.test.ts` — 집계 쿼리 (MySQL / MariaDB 분기)
+- `handler.test.ts` — 공개 `handler`(config)와 내부 handler의 트랜잭션·에러·release 동작
+- `env.test.ts` — `DB_URL` 파싱, env 기본값, `typeCast`
+
+가짜 connection은 `src/_test/unit/helpers.ts`의 `createMockConnection()`을 사용한다. repository 메서드에 connection을 넘기면 pool을 거치지 않으므로 SQL 문자열과 바인딩 값을 그대로 캡처할 수 있다.
+
 ```bash
-npm test
+npm run test:unit
+npm run test:unit -- -t "columnTypes"
 ```
 
-### 2. customer.ts 테스트만 실행
+## 통합 테스트
+
+`.env`의 DB에 접속한다. `transaction.test.ts` / `search.test.ts`는 `test.test` 테이블을 사용하며 **`id`가 AUTO_INCREMENT PRIMARY KEY**여야 한다.
+
+```sql
+CREATE DATABASE IF NOT EXISTS test;
+CREATE TABLE IF NOT EXISTS test.test (
+  id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  text VARCHAR(100) DEFAULT NULL,
+  number INT NOT NULL,
+  numbers VARCHAR(100) NOT NULL,
+  date TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+```
+
+`id`에 AUTO_INCREMENT가 없으면 모든 insert가 `Field 'id' doesn't have a default value`로 실패한다.
+
+`customer.test.ts`는 TOSEL `cs` 스키마(`@edu-tosel/interface`)에 의존하는 서비스 예제 테스트다.
+
+로컬에서 격리된 DB로 돌리려면 (docker):
+
 ```bash
-npm test -- src/_test/service/customer.test.ts
+docker run -d --rm --name mw-test -e MARIADB_ROOT_PASSWORD=test -p 127.0.0.1:33306:3306 mariadb:11
+# 위 CREATE TABLE 실행 후
+DB_URL= DB_HOST=127.0.0.1 DB_PORT=33306 DB_USER=root DB_PASSWORD=test DB_NAME=test DB_TYPE=mariadb \
+  npm run test:integration -- src/_test/integration/transaction.test.ts src/_test/integration/search.test.ts
 ```
 
-### 3. watch 모드로 실행 (파일 변경 시 자동 재실행)
+통합 테스트 파일들은 같은 테이블을 `beforeEach`에서 비우므로 `vitest.config.ts`에서 `fileParallelism: false`로 직렬 실행한다.
+
+## 기타
+
 ```bash
-npm run test:watch -- src/_test/service/customer.test.ts
+npm run test:watch        # watch 모드
+npm run test:coverage     # 커버리지
+npm run typecheck         # 테스트 포함 전체 타입체크
 ```
-
-### 4. 특정 테스트만 실행
-```bash
-# 특정 describe 블록만 실행
-npm test -- src/_test/service/customer.test.ts -t "read 함수 테스트"
-
-# 특정 it 테스트만 실행
-npm test -- src/_test/service/customer.test.ts -t "search가 undefined일 때"
-```
-
-## 테스트 파일 위치
-
-- **실제 서비스 파일**: `src/_test/service/customer.ts`
-- **테스트 파일**: `src/_test/service/customer.test.ts`
-- **패턴 테스트 파일**: `src/_test/service/search.test.ts` (customer.ts 패턴을 모방한 테스트)
-
-## 주요 테스트 시나리오
-
-### ✅ 통과하는 테스트 (search undefined 핵심 테스트)
-
-1. **search가 undefined일 때**
-   - `read({ search: undefined })` - 에러 없이 실행
-   - `count({ search: undefined })` - 에러 없이 실행
-
-2. **search 속성이 없을 때**
-   - `read({})` - 정상 작동
-   - `count({})` - 정상 작동
-
-3. **search가 빈 문자열일 때**
-   - `read({ search: '' })` - 정상 작동
-   - `count({ search: '' })` - 정상 작동
-
-4. **pagination과 함께 사용**
-   - `read({ search: undefined, page: 1, pageSize: 10 })` - 정상 작동
-
-5. **동시성 테스트**
-   - 여러 쿼리가 동시에 실행될 때도 정상 작동
-
-### ⚠️ 주의사항
-
-- DB collation 문제: 실제 DB의 컬럼 collation이 다를 경우 LIKE 연산에서 에러가 발생할 수 있습니다.
-  - 이는 `search`가 `undefined`일 때는 발생하지 않습니다 (조건이 제외되므로)
-  - `search`에 실제 값이 있을 때만 발생할 수 있습니다.
-
-## 테스트 결과 확인
-
-### 성공한 테스트
-```
-✓ customer.ts 실제 서비스 테스트 > 1. read 함수 테스트 - search undefined > search가 undefined일 때 에러 없이 실행되어야 함
-```
-
-### 실패한 테스트
-```
-❯ customer.ts 실제 서비스 테스트 > 1. read 함수 테스트 - search undefined > search가 정상적인 문자열일 때 LIKE 검색 수행
-```
-
-## 핵심 검증 사항
-
-**가장 중요한 테스트**: `search`가 `undefined`일 때 에러가 발생하지 않는지 확인
-
-```typescript
-// ✅ 이 테스트들이 통과하면 버그 수정이 성공한 것
-it('search가 undefined일 때 에러 없이 실행되어야 함', async () => {
-    const result = await consultAdminService.read({ search: undefined });
-    expect(result).toBeInstanceOf(Array);
-});
-```
-
-## 문제 해결
-
-### DB 연결 에러가 발생하는 경우
-1. `.env` 파일에 DB 정보가 올바르게 설정되어 있는지 확인
-2. DB 서버가 실행 중인지 확인
-
-### Collation 에러가 발생하는 경우
-- 이는 `search`가 `undefined`일 때는 발생하지 않습니다
-- 실제 값이 있을 때만 발생하므로, 핵심 버그 수정은 완료된 것입니다
-
-## 추가 테스트
-
-더 많은 시나리오를 테스트하려면 `search.test.ts`를 참고하세요:
-```bash
-npm test -- src/_test/service/search.test.ts
-```
-
-이 파일은 customer.ts의 패턴을 모방하여 40개의 다양한 시나리오를 테스트합니다.
