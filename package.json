@@ -1,7 +1,7 @@
 {
 	"name": "mysql2-wizard",
 	"description": "Type-safe repository and chainable query builder on top of mysql2 (camelCase/snake_case mapping, JSON/Date handling, transactions)",
-	"version": "2.1.0",
+	"version": "2.1.1",
 	"main": "index.js",
 	"types": "index.d.ts",
 	"scripts": {
