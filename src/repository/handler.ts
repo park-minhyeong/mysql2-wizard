@@ -1,7 +1,8 @@
-import mysql2 from "mysql2/promise";
+import type mysql2 from "mysql2/promise";
 import { PoolError } from "../interface";
 import { logger } from "../log";
-import { getConnection } from "../config";
+import { getConnection, releaseConnection, runInTransaction } from "../core/connection";
+import { getErrorProperty, isLockError } from "../core/error";
 
 export interface HandlerOption {
 	useTransaction?: boolean;
@@ -9,63 +10,35 @@ export interface HandlerOption {
 	printSqlError?: boolean;
 }
 
+/**
+ * 내부 handler: repository 쿼리(select/insert/update/delete/calculate)가 connection 없이 호출될 때 사용.
+ * 공개 `handler`(config)와 달리 기본 useTransaction=false, 원본 에러를 그대로 rethrow, connection 실패 시 PoolError.
+ */
 export async function handler<T>(
 	callback: (connection: mysql2.Connection) => Promise<T>,
 	option: HandlerOption = {}
 ): Promise<T> {
 	const { useTransaction = false, throwError = true, printSqlError = true } = option;
+	const connection = await getConnection();
+	if (connection === null) {
+		if (throwError) throw new PoolError('Failed to get database connection');
+		return null as T;
+	}
 	try {
-		const connection = await getConnection();
-		if (connection === null) {
-			if (throwError) throw new PoolError('Failed to get database connection');
-			return null as T;
-		}
-		try {
-			if (useTransaction) await connection.beginTransaction();
-			const result = await callback(connection);
-			if (useTransaction) await connection.commit();
-			return result;
-		} catch (error) {
-			// Deadlock이나 Lock wait timeout은 테스트 환경에서 흔히 발생하므로 로그 출력 생략
-			const isDeadlock = error instanceof Error && (
-				error.message.includes('Deadlock') ||
-				error.message.includes('Lock wait timeout')
-			);
-			
-			if (error instanceof Error && !isDeadlock) {
-				logger.error(error.message);
-				if (printSqlError && 'sql' in error) {
-					logger.error('SQL Error: ' + error);
-					logger.error('SQL Query: ' + (error as any).sql);
-				}
-			}
-			if (useTransaction) await connection.rollback();
-			if (throwError) throw error;
-			return null as T;
-		} finally {
-			// 연결 반환 시 마지막 사용 시간 업데이트
-			(connection as any)._lastUse = Date.now();
-			connection.release();
-		}
+		return await runInTransaction(connection, callback, useTransaction, true);
 	} catch (error) {
-		// getConnection() null → 위에서 이미 PoolError. 그 외(SQL 등)는 원본을 유지해야 원인을 알 수 있음.
-		const isDeadlock = error instanceof Error && (
-			error.message.includes('Deadlock') ||
-			error.message.includes('Lock wait timeout')
-		);
-
-		if (error instanceof PoolError) {
-			if (throwError) throw error;
-			return null as T;
-		}
-
-		if (error instanceof Error && !isDeadlock) {
-			logger.error(`Connection error: ${error.message}`);
-			if (error.stack) {
-				logger.error(`Stack: ${error.stack}`);
+		// Deadlock / Lock wait timeout은 로그 생략. 그 외는 원본 에러를 유지해야 원인을 알 수 있다.
+		if (error instanceof Error && !isLockError(error)) {
+			logger.error(error.message);
+			const sql = getErrorProperty(error, 'sql');
+			if (printSqlError && sql !== undefined) {
+				logger.error('SQL Error: ' + error);
+				logger.error('SQL Query: ' + String(sql));
 			}
 		}
 		if (throwError) throw error;
 		return null as T;
+	} finally {
+		releaseConnection(connection);
 	}
 }
